@@ -15,7 +15,8 @@ import { chromium } from '@playwright/test';
   });
 
   try {
-    await page.goto('http://localhost:8081', { waitUntil: 'networkidle', timeout: 30000 });
+    const port = process.argv[2] || '8081';
+    await page.goto(`http://localhost:${port}`, { waitUntil: 'networkidle', timeout: 30000 });
   } catch (e) {
     console.log('Navigation error:', e.message);
   }
