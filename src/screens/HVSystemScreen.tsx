@@ -3,9 +3,7 @@ import {
   StyleSheet,
   View,
   Text,
-  Image,
   TouchableOpacity,
-  Platform,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -25,14 +23,16 @@ import Svg, {
 import { useBatteryHealthStore } from '../store/batteryHealthStore';
 import { useOBDStore } from '../store/obdStore';
 import { BarMeter } from '../components/meters/BarMeter';
+import { PriusSilhouettePath } from '../components/PriusSilhouettePath';
+import { PRIUS_SILHOUETTE_VIEWBOX } from '../components/priusSilhouettePathData';
 import { THEME } from '../utils/theme';
 import type { DiagnosticTroubleCode } from '../types/obd';
 
 // ─── 定数 ─────────────────────────────────────────────
 
 // Car SVG viewBox (prius-silhouette.svg と一致させる)
-const CAR_W = 398;
-const CAR_H = 190;
+const CAR_W = PRIUS_SILHOUETTE_VIEWBOX.width;
+const CAR_H = PRIUS_SILHOUETTE_VIEWBOX.height;
 
 /**
  * ZVW30 Prius 物理レイアウトに基づくコンポーネント位置
@@ -252,15 +252,6 @@ function PowerFlowCarOverlay({
 
   return (
     <View style={styles.powerFlowArea}>
-      {/* 車体シルエット背景 */}
-      {Platform.OS === 'web' && (
-        <Image
-          source={{ uri: '/prius-silhouette.svg' }}
-          style={styles.carImage}
-          resizeMode="contain"
-        />
-      )}
-
       {/* SVG オーバーレイ (car viewBox と同一座標系で自動整列) */}
       <Svg
         width="100%"
@@ -269,6 +260,9 @@ function PowerFlowCarOverlay({
         preserveAspectRatio="xMidYMid meet"
         style={styles.svgOverlay}
       >
+        {/* 車体シルエット背景 (native/web共通) */}
+        <PriusSilhouettePath color={THEME.text} opacity={0.22} />
+
         {/* ── フロー矢印 (要素間を十分に離して配置) ── */}
 
         {/* ENGINE → POWER SPLIT (MG1): 上から斜め下へ */}
@@ -625,10 +619,6 @@ const styles = StyleSheet.create({
     borderColor: THEME.border,
     backgroundColor: THEME.bgCard,
     overflow: 'hidden',
-  },
-  carImage: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.22,
   },
   svgOverlay: {
     ...StyleSheet.absoluteFillObject,

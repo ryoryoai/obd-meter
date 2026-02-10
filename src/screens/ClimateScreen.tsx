@@ -3,8 +3,6 @@ import {
   StyleSheet,
   View,
   Text,
-  Image,
-  Platform,
 } from 'react-native';
 import Svg, {
   Rect,
@@ -14,12 +12,14 @@ import Svg, {
   Line,
 } from 'react-native-svg';
 import { useOBDStore } from '../store/obdStore';
+import { PriusSilhouettePath } from '../components/PriusSilhouettePath';
+import { PRIUS_SILHOUETTE_VIEWBOX } from '../components/priusSilhouettePathData';
 import { THEME } from '../utils/theme';
 
 // ─── 定数 ─────────────────────────────────────────────
 
-const CAR_W = 398;
-const CAR_H = 190;
+const CAR_W = PRIUS_SILHOUETTE_VIEWBOX.width;
+const CAR_H = PRIUS_SILHOUETTE_VIEWBOX.height;
 
 // 温度→色変換 (寒色→暖色グラデーション)
 function tempToColor(temp: number): string {
@@ -195,13 +195,6 @@ export const ClimateScreen: React.FC = () => {
 
         {/* 中央: 車シルエット + キャビン温度 */}
         <View style={styles.carArea}>
-          {Platform.OS === 'web' && (
-            <Image
-              source={{ uri: '/prius-silhouette.svg' }}
-              style={[StyleSheet.absoluteFill, { opacity: 0.18 }]}
-              resizeMode="contain"
-            />
-          )}
           <Svg
             width="100%"
             height="100%"
@@ -209,6 +202,7 @@ export const ClimateScreen: React.FC = () => {
             preserveAspectRatio="xMidYMid meet"
             style={StyleSheet.absoluteFill}
           >
+            <PriusSilhouettePath color={THEME.text} opacity={0.18} />
             <ZoneDividers />
             <CabinTempLabel x={105} y={75} label="FRONT" temp={frontTemp} />
             <CabinTempLabel x={195} y={75} label="MID" temp={midTemp} />
