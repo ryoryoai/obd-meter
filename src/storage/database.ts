@@ -1,7 +1,39 @@
-import * as SQLite from 'expo-sqlite';
 import type { LogSession, DataPoint } from '../types/obd';
+import type { SQLiteDatabase } from 'expo-sqlite';
+import { TurboModuleRegistry } from 'react-native';
 
 const DB_NAME = 'obd_meter.db';
+
+type ExpoSQLiteModule = typeof import('expo-sqlite');
+
+let cachedSQLite: ExpoSQLiteModule | null | undefined;
+let warnedMissingSQLite = false;
+
+function getExpoSQLite(): ExpoSQLiteModule | null {
+  if (cachedSQLite !== undefined) {
+    return cachedSQLite;
+  }
+
+  // Avoid loading expo-sqlite unless its native side is present.
+  // If we try to load it while Expo modules aren't installed, Metro can treat the thrown
+  // exception as fatal (even if we wrap require() in try/catch), crashing the app.
+  const hasExpoModulesCore = TurboModuleRegistry.get('ExpoModulesCore') != null;
+  const hasExpoSQLite = TurboModuleRegistry.get('ExpoSQLite') != null;
+
+  if (!hasExpoModulesCore || !hasExpoSQLite) {
+    cachedSQLite = null;
+    if (!warnedMissingSQLite) {
+      warnedMissingSQLite = true;
+      console.warn('ExpoSQLite native module is missing; logging features are disabled.');
+    }
+    return cachedSQLite;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  cachedSQLite = require('expo-sqlite') as ExpoSQLiteModule;
+
+  return cachedSQLite;
+}
 
 /**
  * OBDデータログ用SQLiteデータベース管理クラス
@@ -10,13 +42,18 @@ const DB_NAME = 'obd_meter.db';
  * data_points テーブルで各PIDの計測値を時系列で保存する。
  */
 class Database {
-  private db: SQLite.SQLiteDatabase | null = null;
+  private db: SQLiteDatabase | null = null;
 
   /**
    * データベースを開き、テーブルとインデックスを作成する。
    * アプリ起動時に一度呼ぶこと。
    */
   async initialize(): Promise<void> {
+    const SQLite = getExpoSQLite();
+    if (!SQLite) {
+      return;
+    }
+
     this.db = await SQLite.openDatabaseAsync(DB_NAME);
 
     await this.db.execAsync(`
@@ -48,7 +85,7 @@ class Database {
   /**
    * 初期化済みのDBインスタンスを返す (内部用)。未初期化の場合はエラーを投げる。
    */
-  private getDbInternal(): SQLite.SQLiteDatabase {
+  private getDbInternal(): SQLiteDatabase {
     if (!this.db) {
       throw new Error('Database not initialized. Call initialize() first.');
     }
@@ -229,7 +266,7 @@ class Database {
    * 初期化済みのDBインスタンスを外部に公開する。
    * 未初期化の場合はエラーを投げる。
    */
-  getDb(): SQLite.SQLiteDatabase {
+  getDb(): SQLiteDatabase {
     return this.getDbInternal();
   }
 

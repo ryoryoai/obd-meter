@@ -206,6 +206,123 @@ export class OBDProtocol {
   }
 
   /**
+   * Read Diagnostic Trouble Codes (DTCs) from the vehicle.
+   * Sends OBD-II Mode 03 (Show stored DTCs).
+   *
+   * Response format: 43 [count] [DTC byte pairs...]
+   * Each DTC is 2 bytes. Decode using formatDTCCode pattern:
+   *   Bits 15-14: Type (00=P, 01=C, 10=B, 11=U)
+   *   Bits 13-12: Second digit
+   *   Remaining bits: hex digits
+   *
+   * @returns Array of DTC code strings (e.g. ["P0301", "C1234"])
+   */
+  async readDTCs(): Promise<{ code: string; isPending: boolean }[]> {
+    if (!this.elm327.isConnected()) {
+      throw new Error('ELM327 adapter is not connected');
+    }
+
+    const results: { code: string; isPending: boolean }[] = [];
+
+    // Mode 03: Stored DTCs
+    try {
+      const rawResponse = await this.elm327.sendCommand('03');
+      const dtcs = this.parseDTCResponse(rawResponse, false);
+      results.push(...dtcs);
+    } catch {
+      // No stored DTCs or communication error
+    }
+
+    // Mode 07: Pending DTCs
+    try {
+      const rawResponse = await this.elm327.sendCommand('07');
+      const dtcs = this.parseDTCResponse(rawResponse, true);
+      results.push(...dtcs);
+    } catch {
+      // No pending DTCs or communication error
+    }
+
+    return results;
+  }
+
+  /**
+   * Clear all DTCs and reset MIL (Check Engine Light).
+   * Sends OBD-II Mode 04.
+   *
+   * WARNING: This clears stored freeze frame data and resets monitors.
+   *
+   * @returns true if clear was successful
+   */
+  async clearDTCs(): Promise<boolean> {
+    if (!this.elm327.isConnected()) {
+      throw new Error('ELM327 adapter is not connected');
+    }
+
+    try {
+      const rawResponse = await this.elm327.sendCommand('04');
+      // Positive response is 44
+      return rawResponse.includes('44');
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Parse DTC response bytes into code strings.
+   */
+  private parseDTCResponse(
+    rawResponse: string,
+    isPending: boolean,
+  ): { code: string; isPending: boolean }[] {
+    const cleaned = rawResponse
+      .replace(/>/g, '')
+      .replace(/\r/g, ' ')
+      .replace(/\n/g, ' ')
+      .trim();
+
+    if (
+      cleaned.includes('NO DATA') ||
+      cleaned.includes('ERROR') ||
+      cleaned.trim() === ''
+    ) {
+      return [];
+    }
+
+    const tokens = cleaned.split(/\s+/).filter((t) => /^[0-9A-Fa-f]{2}$/.test(t));
+    const allBytes = tokens.map((t) => parseInt(t, 16));
+
+    // Find response header (43 for Mode 03, 47 for Mode 07)
+    const responseHeader = isPending ? 0x47 : 0x43;
+    const headerIndex = allBytes.indexOf(responseHeader);
+    if (headerIndex === -1) return [];
+
+    // Skip header byte and count byte
+    const dataStart = headerIndex + 1;
+    const results: { code: string; isPending: boolean }[] = [];
+
+    // Each DTC is 2 bytes
+    for (let i = dataStart; i + 1 < allBytes.length; i += 2) {
+      const byte1 = allBytes[i];
+      const byte2 = allBytes[i + 1];
+
+      // Skip padding (0x00 0x00)
+      if (byte1 === 0 && byte2 === 0) continue;
+
+      const typeMap = ['P', 'C', 'B', 'U'];
+      const typeIndex = (byte1 >> 6) & 0x03;
+      const digit2 = (byte1 >> 4) & 0x03;
+      const digit3 = byte1 & 0x0F;
+      const digit4 = (byte2 >> 4) & 0x0F;
+      const digit5 = byte2 & 0x0F;
+      const code = `${typeMap[typeIndex]}${digit2}${digit3.toString(16).toUpperCase()}${digit4.toString(16).toUpperCase()}${digit5.toString(16).toUpperCase()}`;
+
+      results.push({ code, isPending });
+    }
+
+    return results;
+  }
+
+  /**
    * Parse the raw ELM327 response string into data bytes.
    *
    * ELM327 responses follow this format:

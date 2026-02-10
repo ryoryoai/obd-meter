@@ -23,6 +23,7 @@ import Animated, {
 
 import { useConnectionStore } from '../store/connectionStore';
 import { BleConnectionManager } from '../bluetooth/BleManager';
+import { mockDataProvider } from '../utils/mockDataProvider';
 import type { BLEDevice } from '../types/obd';
 
 const COLORS = {
@@ -162,6 +163,7 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = ({
   const setConnectionState = useConnectionStore((s) => s.setConnectionState);
   const setDevice = useConnectionStore((s) => s.setDevice);
   const setError = useConnectionStore((s) => s.setError);
+  const setDemoMode = useConnectionStore((s) => s.setDemoMode);
 
   // 検出デバイスはBleConnectionManager.scanForDevices()が返すため
   // ローカルステートで管理する
@@ -253,6 +255,14 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = ({
     [localDevices, setConnectionState, setDevice, setError],
   );
 
+  // デモモード開始
+  const handleDemoMode = useCallback(() => {
+    setDemoMode(true);
+    setDevice({ id: 'DEMO', name: 'Demo Mode', rssi: null });
+    setConnectionState('connected');
+    mockDataProvider.start(200);
+  }, [setDemoMode, setDevice, setConnectionState]);
+
   const isScanning = connectionState === 'scanning';
   const isConnecting = connectionState === 'connecting';
 
@@ -339,6 +349,18 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = ({
         </Animated.View>
       )}
 
+      {/* デモモードボタン */}
+      <View style={styles.demoSection}>
+        <TouchableOpacity
+          style={styles.demoButton}
+          onPress={handleDemoMode}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.demoButtonText}>Demo Mode</Text>
+          <Text style={styles.demoButtonHint}>OBD接続なしでUIを確認</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* デバイス一覧 */}
       <View style={styles.deviceListContainer}>
         <Text style={styles.sectionTitle}>
@@ -424,6 +446,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+
+  // デモモード
+  demoSection: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  demoButton: {
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    borderWidth: 1,
+    borderColor: COLORS.warning,
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    alignItems: 'center',
+    minWidth: 200,
+  },
+  demoButtonText: {
+    color: COLORS.warning,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  demoButtonHint: {
+    color: COLORS.textDim,
+    fontSize: 11,
+    marginTop: 2,
   },
 
   // エラーバナー

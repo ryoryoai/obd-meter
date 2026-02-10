@@ -19,21 +19,22 @@ import Animated, {
   cancelAnimation,
   Easing,
 } from 'react-native-reanimated';
+import { THEME } from '../../utils/theme';
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
 const COLORS = {
-  background: '#1a1a2e',
-  batteryBorder: '#64748b',
-  batteryFill: '#16213e',
-  socHigh: '#00ff88',
-  socMid: '#ffd700',
-  socLow: '#e94560',
-  charging: '#00d4ff',
-  discharging: '#ffd700',
-  text: '#ffffff',
-  label: '#8892a4',
-  subValue: '#64748b',
+  background: THEME.bgElevated,
+  batteryBorder: THEME.textDim,
+  batteryFill: THEME.borderSubtle,
+  socHigh: THEME.success,
+  socMid: THEME.warning,
+  socLow: THEME.accent,
+  charging: THEME.primary,
+  discharging: THEME.warning,
+  text: THEME.text,
+  label: THEME.textSecondary,
+  subValue: THEME.textDim,
 };
 
 interface BatteryIndicatorProps {
@@ -291,11 +292,11 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.background,
+    backgroundColor: THEME.bg,
     borderRadius: 16,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#16213e',
+    borderColor: THEME.borderSubtle,
   },
   statusRow: {
     flexDirection: 'row',
@@ -334,7 +335,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#16213e',
+    borderTopColor: THEME.borderSubtle,
   },
   subInfoItem: {
     flexDirection: 'row',
@@ -356,6 +357,6 @@ const styles = StyleSheet.create({
   subInfoDivider: {
     width: 1,
     height: 16,
-    backgroundColor: '#16213e',
+    backgroundColor: THEME.borderSubtle,
   },
 });

@@ -10,6 +10,8 @@ interface ConnectionStoreState {
   isElm327Ready: boolean;
   /** エラーメッセージ */
   error: string | null;
+  /** デモモード有効フラグ */
+  demoMode: boolean;
 }
 
 interface ConnectionStoreActions {
@@ -17,6 +19,7 @@ interface ConnectionStoreActions {
   setDevice: (device: BLEDevice | null) => void;
   setElm327Ready: (ready: boolean) => void;
   setError: (error: string | null) => void;
+  setDemoMode: (enabled: boolean) => void;
   reset: () => void;
 }
 
@@ -27,6 +30,7 @@ const initialState: ConnectionStoreState = {
   device: null,
   isElm327Ready: false,
   error: null,
+  demoMode: false,
 };
 
 /**
@@ -61,6 +65,9 @@ export const useConnectionStore = create<ConnectionStore>(set => ({
       // エラーが設定された場合、接続状態もerrorにする
       ...(error !== null ? { state: 'error' as ConnectionState } : {}),
     }),
+
+  setDemoMode: (enabled: boolean) =>
+    set({ demoMode: enabled }),
 
   reset: () => set(initialState),
 }));

@@ -132,6 +132,81 @@ export const TOYOTA_PIDS: Record<string, PidDefinition> = {
     max: 1,
     decode: (b) => b[0] & 0x01,
   },
+
+  // --- HV Battery Block Voltages ---
+  // ZVW30のNiMH バッテリーパックは28モジュールで構成。
+  // 14ブロック (各2モジュール直列) の電圧をまとめて読み取る。
+  // Mode 22 PID 0x2109 → レスポンス: 28バイト (14ペア × 2バイト)
+  // 各ブロック電圧 = (A * 256 + B) / 1000 (V)
+  // このPIDはデコード関数で先頭ブロック(index 0)のみ返す。
+  // 全ブロックの解析はbatteryHealthStoreで行う。
+  '2109': {
+    pid: '2109',
+    name: 'HV Battery Block Voltages',
+    shortName: 'Blk V',
+    unit: 'V',
+    min: 0,
+    max: 20,
+    decode: (b) => (b.length >= 2) ? (b[0] * 256 + b[1]) / 1000 : 0,
+  },
+
+  // --- HV Battery Temperature Distribution ---
+  // 3つの温度センサー (バッテリーパック内の前・中・後)
+  // Mode 22 PID 0x210A → レスポンス: 3バイト
+  // 各バイト: temperature = byte - 40 (°C)
+  // このPIDはデコード関数で先頭センサーのみ返す。
+  '210A': {
+    pid: '210A',
+    name: 'HV Battery Temp Distribution',
+    shortName: 'Bat Temps',
+    unit: '\u00B0C',
+    min: -40,
+    max: 100,
+    decode: (b) => (b.length >= 1) ? b[0] - 40 : 0,
+  },
+
+  // --- 12V Auxiliary Battery Voltage ---
+  // 補機バッテリー (12V鉛蓄電池) の電圧
+  // Mode 22 PID 0x210B → レスポンス: 1バイト
+  // voltage = byte / 10 (V)
+  '210B': {
+    pid: '210B',
+    name: '12V Auxiliary Battery',
+    shortName: '12V Bat',
+    unit: 'V',
+    min: 0,
+    max: 20,
+    decode: (b) => (b.length >= 1) ? b[0] / 10 : 0,
+  },
+
+  // --- Cabin Temperature (内気温) ---
+  // エアコンECUから取得する車室内温度センサー値
+  // Mode 22 PID 0x210C → レスポンス: 1バイト
+  // temperature = byte - 40 (°C)
+  '210C': {
+    pid: '210C',
+    name: 'Cabin Temperature',
+    shortName: 'Cabin',
+    unit: '\u00B0C',
+    min: -40,
+    max: 80,
+    decode: (b) => (b.length >= 1) ? b[0] - 40 : 0,
+  },
+
+  // --- A/C Compressor Status & Set Temperature ---
+  // エアコンコンプレッサー状態と設定温度
+  // Mode 22 PID 0x210D → レスポンス: 2バイト
+  // Byte A: コンプレッサーON/OFF (bit0: 1=ON, 0=OFF)
+  // Byte B: 設定温度 = byte / 2 (°C) (例: 50→25°C)
+  '210D': {
+    pid: '210D',
+    name: 'A/C Compressor Status',
+    shortName: 'A/C',
+    unit: '',
+    min: 0,
+    max: 1,
+    decode: (b) => (b.length >= 1) ? b[0] & 0x01 : 0,
+  },
 };
 
 /**

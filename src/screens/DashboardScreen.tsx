@@ -21,6 +21,7 @@ import { BatteryIndicator } from '../components/meters/BatteryIndicator';
 import { useOBDStore } from '../store/obdStore';
 import { useConnectionStore } from '../store/connectionStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { THEME } from '../utils/theme';
 
 /**
  * KeepAwake: 画面常時点灯を制御する。
@@ -28,25 +29,13 @@ import { useSettingsStore } from '../store/settingsStore';
  * ここでは useEffect 内で Platform 別に制御する。
  */
 
-const COLORS = {
-  background: '#0f0f1a',
-  headerBg: '#1a1a2e',
-  primary: '#00d4ff',
-  accent: '#e94560',
-  success: '#00ff88',
-  warning: '#ffd700',
-  text: '#ffffff',
-  textDim: '#64748b',
-  border: '#16213e',
-};
-
 // 接続状態に応じたドットカラー
 const CONNECTION_COLORS: Record<string, string> = {
-  connected: COLORS.success,
-  connecting: COLORS.warning,
-  scanning: COLORS.primary,
-  disconnected: COLORS.textDim,
-  error: COLORS.accent,
+  connected: THEME.success,
+  connecting: THEME.warning,
+  scanning: THEME.primary,
+  disconnected: THEME.textDim,
+  error: THEME.accent,
 };
 
 /**
@@ -114,10 +103,20 @@ export const DashboardScreen: React.FC = () => {
   const averageFuel = usePidValue('CALC_AVG_FUEL', 0);
   const evRatio = usePidValue('CALC_EV_RATIO', 0);
 
+  // 環境データ
+  const ambientTemp = usePidValue('0146', 20);
+  const cabinTemp = usePidValue('TOYOTA_CABIN_TEMP', 22);
+  const acStatus = usePidValue('TOYOTA_AC_STATUS', 0);
+  const acSetTemp = usePidValue('TOYOTA_AC_SET_TEMP', 24);
+
+  const demoMode = useConnectionStore((s) => s.demoMode);
+
   const connectionLabel =
-    connectionState === 'connected'
-      ? connectedDevice?.name ?? 'ELM327'
-      : connectionState.charAt(0).toUpperCase() + connectionState.slice(1);
+    demoMode
+      ? 'Demo Mode'
+      : connectionState === 'connected'
+        ? connectedDevice?.name ?? 'ELM327'
+        : connectionState.charAt(0).toUpperCase() + connectionState.slice(1);
 
   return (
     <View style={styles.screen}>
@@ -129,7 +128,7 @@ export const DashboardScreen: React.FC = () => {
           <Animated.View
             style={[
               styles.connectionDot,
-              { backgroundColor: CONNECTION_COLORS[connectionState] ?? COLORS.textDim },
+              { backgroundColor: CONNECTION_COLORS[connectionState] ?? THEME.textDim },
               dotAnimatedStyle,
             ]}
           />
@@ -140,6 +139,37 @@ export const DashboardScreen: React.FC = () => {
 
         <View style={styles.headerRight}>
           <Text style={styles.vehicleText}>ZVW30 Prius</Text>
+        </View>
+      </View>
+
+      {/* 環境情報バー */}
+      <View style={styles.envBar}>
+        <View style={styles.envItem}>
+          <Text style={styles.envLabel}>OUT</Text>
+          <Text style={styles.envValue}>{ambientTemp.toFixed(1)}</Text>
+          <Text style={styles.envUnit}>{'\u00B0C'}</Text>
+        </View>
+        <View style={styles.envSeparator} />
+        <View style={styles.envItem}>
+          <Text style={styles.envLabel}>IN</Text>
+          <Text style={styles.envValue}>{cabinTemp.toFixed(1)}</Text>
+          <Text style={styles.envUnit}>{'\u00B0C'}</Text>
+        </View>
+        <View style={styles.envSeparator} />
+        <View style={styles.envItem}>
+          <Text style={styles.envLabel}>A/C</Text>
+          <Text style={[
+            styles.envValue,
+            { color: acStatus > 0 ? THEME.primary : THEME.textDim },
+          ]}>
+            {acStatus > 0 ? 'ON' : 'OFF'}
+          </Text>
+        </View>
+        <View style={styles.envSeparator} />
+        <View style={styles.envItem}>
+          <Text style={styles.envLabel}>SET</Text>
+          <Text style={styles.envValue}>{acSetTemp.toFixed(0)}</Text>
+          <Text style={styles.envUnit}>{'\u00B0C'}</Text>
         </View>
       </View>
 
@@ -252,7 +282,7 @@ export const DashboardScreen: React.FC = () => {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: THEME.bg,
   },
 
   // ヘッダー
@@ -260,11 +290,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: COLORS.headerBg,
+    backgroundColor: THEME.bgElevated,
     paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: THEME.border,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -278,15 +308,15 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   connectionText: {
-    color: COLORS.text,
+    color: THEME.text,
     fontSize: 13,
     fontWeight: '500',
   },
   headerTitle: {
-    color: COLORS.primary,
-    fontSize: 16,
+    color: THEME.primary,
+    fontSize: 15,
     fontWeight: '700',
-    letterSpacing: 1,
+    letterSpacing: 1.5,
     flex: 1,
     textAlign: 'center',
   },
@@ -295,16 +325,56 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   vehicleText: {
-    color: COLORS.textDim,
+    color: THEME.textDim,
     fontSize: 12,
     fontWeight: '500',
+  },
+
+  // 環境情報バー
+  envBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: THEME.bgElevated,
+    paddingVertical: 6,
+    paddingHorizontal: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME.border,
+  },
+  envItem: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    paddingHorizontal: 12,
+  },
+  envLabel: {
+    color: THEME.textDim,
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    marginRight: 6,
+  },
+  envValue: {
+    color: THEME.text,
+    fontSize: 14,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'] as any,
+  },
+  envUnit: {
+    color: THEME.textDim,
+    fontSize: 10,
+    marginLeft: 2,
+  },
+  envSeparator: {
+    width: 1,
+    height: 16,
+    backgroundColor: THEME.border,
   },
 
   // メーターエリア
   meterArea: {
     flex: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     justifyContent: 'space-between',
   },
 
@@ -326,7 +396,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     flex: 2,
-    paddingHorizontal: 8,
+    paddingHorizontal: 16,
   },
   smallGaugeContainer: {
     alignItems: 'center',
@@ -346,7 +416,7 @@ const styles = StyleSheet.create({
   // 下段 (デジタル)
   bottomRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-evenly',
     alignItems: 'center',
     flex: 1,
     paddingBottom: 4,
@@ -355,6 +425,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
-    marginHorizontal: 4,
   },
 });

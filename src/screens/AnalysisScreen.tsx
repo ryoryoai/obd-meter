@@ -7,22 +7,23 @@ import {
   View,
 } from 'react-native';
 import { CartesianChart, Line } from 'victory-native';
-import { useFont } from '@shopify/react-native-skia';
+import { matchFont } from '@shopify/react-native-skia';
 import type { FuelEconomyData } from '../types/obd';
 import { fuelAnalysis } from '../analysis/fuelAnalysis';
+import { THEME } from '../utils/theme';
 
 // --- 定数 ---
 
 const COLORS = {
-  background: '#0f0f1a',
-  card: '#1a1a2e',
-  cardBorder: '#2a2a4a',
-  primary: '#00d4ff',
-  accent: '#00ff88',
-  warning: '#ffaa00',
-  text: '#e0e0ff',
-  textSecondary: '#8888aa',
-  graphGrid: '#2a2a4a',
+  background: THEME.bg,
+  card: THEME.bgCard,
+  cardBorder: THEME.border,
+  primary: THEME.primary,
+  accent: THEME.success,
+  warning: THEME.warning,
+  text: THEME.text,
+  textSecondary: THEME.textSecondary,
+  graphGrid: THEME.border,
 } as const;
 
 /** グラフに表示する最大データポイント数 */
@@ -92,7 +93,16 @@ export function AnalysisScreen() {
   );
   const [graphData, setGraphData] = useState<GraphPoint[]>([]);
   const tripStartTime = useRef(Date.now());
-  const font = useFont(require('../../assets/fonts/inter-medium.ttf'), 10);
+  const axisFont = React.useMemo(
+    () =>
+      matchFont({
+        fontFamily: 'System',
+        fontSize: 10,
+        fontStyle: 'normal',
+        fontWeight: '500',
+      }),
+    [],
+  );
 
   // リアルタイム更新: fuelAnalysisの最新状態を定期取得
   useEffect(() => {
@@ -192,7 +202,7 @@ export function AnalysisScreen() {
             padding={{ left: 10, right: 10, top: 10, bottom: 10 }}
             domainPadding={{ left: 10, right: 10, top: 10, bottom: 0 }}
             xAxis={{
-              font,
+              font: axisFont,
               tickCount: 5,
               labelColor: COLORS.textSecondary,
               lineColor: COLORS.graphGrid,
@@ -200,7 +210,7 @@ export function AnalysisScreen() {
             }}
             yAxis={[
               {
-                font,
+                font: axisFont,
                 tickCount: 4,
                 labelColor: COLORS.textSecondary,
                 lineColor: COLORS.graphGrid,

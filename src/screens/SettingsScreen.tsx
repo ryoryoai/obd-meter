@@ -14,18 +14,19 @@ import {
 } from 'react-native';
 import { useSettingsStore } from '../store/settingsStore';
 import { database } from '../storage/database';
+import { THEME } from '../utils/theme';
 
-/** カラーパレット (ダークテーマ) */
+/** カラーパレット (THEMEからマッピング) */
 const Colors = {
-  background: '#0f0f1a',
-  section: '#1a1a2e',
-  primary: '#00d4ff',
-  accent: '#e94560',
-  success: '#00ff88',
-  warning: '#ffd700',
-  text: '#ffffff',
-  subText: '#888888',
-  border: '#2a2a3e',
+  background: THEME.bg,
+  section: THEME.bgElevated,
+  primary: THEME.primary,
+  accent: THEME.accent,
+  success: THEME.success,
+  warning: THEME.warning,
+  text: THEME.text,
+  subText: THEME.textSecondary,
+  border: THEME.border,
 } as const;
 
 /**

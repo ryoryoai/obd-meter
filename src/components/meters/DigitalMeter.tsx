@@ -7,13 +7,14 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
+import { THEME } from '../../utils/theme';
 
 const COLORS = {
-  background: '#1a1a2e',
-  value: '#00d4ff',
-  unit: '#64748b',
-  label: '#8892a4',
-  text: '#ffffff',
+  background: THEME.bgElevated,
+  value: THEME.primary,
+  unit: THEME.textDim,
+  label: THEME.textSecondary,
+  text: THEME.text,
 };
 
 interface DigitalMeterProps {
@@ -101,7 +102,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#16213e',
+    borderColor: THEME.borderSubtle,
   },
   label: {
     color: COLORS.label,

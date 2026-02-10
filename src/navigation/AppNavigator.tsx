@@ -3,6 +3,8 @@ import { Text, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { DashboardScreen } from '../screens/DashboardScreen';
+import { BatteryHealthScreen } from '../screens/BatteryHealthScreen';
+import { HVSystemScreen } from '../screens/HVSystemScreen';
 import { LogScreen } from '../screens/LogScreen';
 import { AnalysisScreen } from '../screens/AnalysisScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
@@ -10,6 +12,8 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 /** タブナビゲーションのルート定義 */
 type TabParamList = {
   Dashboard: undefined;
+  Battery: undefined;
+  'HV System': undefined;
   Log: undefined;
   Analysis: undefined;
   Settings: undefined;
@@ -33,6 +37,8 @@ const TAB_COLORS = {
  */
 const TAB_ICONS: Record<keyof TabParamList, string> = {
   Dashboard: '\u{1F3CE}',  // racing car (speedometer風)
+  Battery: '\u{1F50B}',    // battery
+  'HV System': '\u{26A1}', // high voltage
   Log: '\u{1F4CB}',        // clipboard (list風)
   Analysis: '\u{1F4CA}',   // bar chart (chart風)
   Settings: '\u{2699}',    // gear
@@ -73,6 +79,16 @@ export function AppNavigator(): React.JSX.Element {
           name="Dashboard"
           component={DashboardScreen}
           options={{ tabBarLabel: 'Dashboard' }}
+        />
+        <Tab.Screen
+          name="Battery"
+          component={BatteryHealthScreen}
+          options={{ tabBarLabel: 'Battery' }}
+        />
+        <Tab.Screen
+          name="HV System"
+          component={HVSystemScreen}
+          options={{ tabBarLabel: 'HV System' }}
         />
         <Tab.Screen
           name="Log"

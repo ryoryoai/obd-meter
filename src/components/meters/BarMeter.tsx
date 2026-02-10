@@ -12,18 +12,19 @@ import Animated, {
   useAnimatedProps,
   withSpring,
 } from 'react-native-reanimated';
+import { THEME } from '../../utils/theme';
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
 const COLORS = {
-  background: '#0f0f1a',
-  barBackground: '#16213e',
-  text: '#ffffff',
-  value: '#e94560',
-  label: '#64748b',
-  gradientStart: '#00ff88',
-  gradientMid: '#ffd700',
-  gradientEnd: '#e94560',
+  background: THEME.bg,
+  barBackground: THEME.borderSubtle,
+  text: THEME.text,
+  value: THEME.accent,
+  label: THEME.textDim,
+  gradientStart: THEME.success,
+  gradientMid: THEME.warning,
+  gradientEnd: THEME.accent,
 };
 
 interface BarMeterProps {

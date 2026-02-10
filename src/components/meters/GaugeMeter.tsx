@@ -15,23 +15,24 @@ import Animated, {
   withSpring,
   useDerivedValue,
 } from 'react-native-reanimated';
+import { THEME } from '../../utils/theme';
 
 const AnimatedLine = Animated.createAnimatedComponent(Line);
 
-// ダークテーマカラー
+// ダークテーマカラー (THEMEから派生)
 const COLORS = {
-  background: '#1a1a2e',
-  arc: '#16213e',
-  value: '#e94560',
-  primary: '#00d4ff',
-  warning: '#ffd700',
-  danger: '#e94560',
-  text: '#ffffff',
+  background: THEME.bgElevated,
+  arc: THEME.borderSubtle,
+  value: THEME.accent,
+  primary: THEME.primary,
+  warning: THEME.warning,
+  danger: THEME.accent,
+  text: THEME.text,
   tickMinor: '#334155',
-  tickMajor: '#64748b',
-  needle: '#e94560',
-  needleCenter: '#ffffff',
-  normalZone: '#00d4ff',
+  tickMajor: THEME.textDim,
+  needle: THEME.accent,
+  needleCenter: THEME.text,
+  normalZone: THEME.primary,
 };
 
 interface GaugeMeterProps {
