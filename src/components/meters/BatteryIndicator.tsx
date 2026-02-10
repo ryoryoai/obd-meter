@@ -2,7 +2,6 @@ import React, { useEffect } from 'react';
 import { StyleSheet, View, Text } from 'react-native';
 import Svg, {
   Rect,
-  G,
   Defs,
   LinearGradient,
   Stop,
@@ -60,6 +59,8 @@ export const BatteryIndicator: React.FC<BatteryIndicatorProps> = ({
   const animatedSoc = useSharedValue(0);
   const flashOpacity = useSharedValue(1);
   const chargePulse = useSharedValue(0);
+  const isLowSoc = soc < 20;
+  const isCurrentActive = current !== 0;
 
   // SOCアニメーション
   useEffect(() => {
@@ -72,7 +73,7 @@ export const BatteryIndicator: React.FC<BatteryIndicatorProps> = ({
 
   // SOC低下時の点滅アニメーション
   useEffect(() => {
-    if (soc < 20) {
+    if (isLowSoc) {
       flashOpacity.value = withRepeat(
         withSequence(
           withTiming(0.2, { duration: 500, easing: Easing.inOut(Easing.ease) }),
@@ -85,11 +86,11 @@ export const BatteryIndicator: React.FC<BatteryIndicatorProps> = ({
       cancelAnimation(flashOpacity);
       flashOpacity.value = withTiming(1, { duration: 200 });
     }
-  }, [soc < 20, flashOpacity, soc]);
+  }, [isLowSoc, flashOpacity]);
 
   // 充電/放電パルスアニメーション
   useEffect(() => {
-    if (current !== 0) {
+    if (isCurrentActive) {
       chargePulse.value = withRepeat(
         withSequence(
           withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.ease) }),
@@ -102,7 +103,7 @@ export const BatteryIndicator: React.FC<BatteryIndicatorProps> = ({
       cancelAnimation(chargePulse);
       chargePulse.value = withTiming(0, { duration: 200 });
     }
-  }, [current !== 0, chargePulse, current]);
+  }, [isCurrentActive, chargePulse]);
 
   // バッテリーアイコンの寸法
   const batteryWidth = 160;

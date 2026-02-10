@@ -104,7 +104,7 @@ interface BatteryHealthActions {
 
 type BatteryHealthStore = BatteryHealthState & BatteryHealthActions;
 
-export const useBatteryHealthStore = create<BatteryHealthStore>((set, get) => ({
+export const useBatteryHealthStore = create<BatteryHealthStore>((set, _get) => ({
   summary: { ...INITIAL_SUMMARY },
   dtcList: [],
   powerFlow: { ...INITIAL_POWER_FLOW },

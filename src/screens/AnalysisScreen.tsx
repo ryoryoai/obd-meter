@@ -138,14 +138,15 @@ export function AnalysisScreen() {
   }, []);
 
   // トリップ経過時間を "HH:mm:ss" で表示
-  const tripDuration = React.useMemo(() => {
+  // (summary更新で定期的に再レンダされるので、ここは単純計算でOK)
+  const tripDuration = (() => {
     const elapsedMs = Date.now() - tripStartTime.current;
     const totalSec = Math.floor(elapsedMs / 1000);
     const h = Math.floor(totalSec / 3600);
     const m = Math.floor((totalSec % 3600) / 60);
     const s = totalSec % 60;
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  }, [summary]); // summaryの更新に連動して再計算
+  })();
 
   // グラフが空の場合のプレースホルダデータ
   const chartData =

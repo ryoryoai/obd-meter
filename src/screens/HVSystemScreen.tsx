@@ -23,11 +23,11 @@ import Svg, {
   Stop,
   Circle,
   Polygon,
-  Path,
 } from 'react-native-svg';
 import { useBatteryHealthStore } from '../store/batteryHealthStore';
 import { useOBDStore } from '../store/obdStore';
 import { BarMeter } from '../components/meters/BarMeter';
+import { PriusSilhouette } from '../components/PriusSilhouette';
 import { THEME } from '../utils/theme';
 import type { DiagnosticTroubleCode } from '../types/obd';
 
@@ -524,6 +524,11 @@ export function HVSystemScreen(): React.JSX.Element {
       style={styles.screen}
       contentContainerStyle={styles.screenContent}
     >
+      {/* プリウス線画背景 */}
+      <View style={styles.silhouetteBackground} pointerEvents="none">
+        <PriusSilhouette width={800} height={380} opacity={0.1} />
+      </View>
+
       {/* Header */}
       <View style={styles.headerBar}>
         <Text style={styles.headerTitle}>HV System Monitor</Text>
@@ -667,6 +672,14 @@ const styles = StyleSheet.create({
   screenContent: {
     padding: 14,
     paddingBottom: 24,
+  },
+  silhouetteBackground: {
+    position: 'absolute',
+    top: 80,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 0,
   },
   headerBar: {
     backgroundColor: THEME.bgElevated,

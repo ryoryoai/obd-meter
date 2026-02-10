@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -22,8 +22,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { useConnectionStore } from '../store/connectionStore';
-import { BleConnectionManager } from '../bluetooth/BleManager';
-import { mockDataProvider } from '../utils/mockDataProvider';
+import { obdClient } from '../obd/obdClient';
 import type { BLEDevice } from '../types/obd';
 
 const COLORS = {
@@ -139,41 +138,38 @@ const DeviceCard: React.FC<{
 };
 
 interface ConnectionScreenProps {
-  navigation?: {
-    navigate: (screen: string) => void;
-    replace: (screen: string) => void;
-  };
+  // react-navigation props are intentionally not typed here to keep this screen decoupled
+  // from a specific navigator (tabs/stack).
+  navigation?: any;
 }
 
 /**
- * BLE接続画面
+ * Bluetooth接続画面 (Classic SPP)
  *
- * ELM327デバイスをスキャンして一覧表示し、
- * 選択したデバイスに接続する。接続成功後は
- * DashboardScreenに自動遷移する。
+ * ほとんどの安価なELM327は「Bluetooth Classic」で、
+ * AndroidのBluetooth設定でペアリング(PIN: 1234/0000)した後に
+ * アプリから接続する必要がある。
  */
 export const ConnectionScreen: React.FC<ConnectionScreenProps> = ({
-  navigation,
+  navigation: _navigation,
 }) => {
-  const bleManagerRef = useRef<BleConnectionManager | null>(null);
-
   const connectionState = useConnectionStore((s) => s.state);
   const connectedDevice = useConnectionStore((s) => s.device);
   const errorMessage = useConnectionStore((s) => s.error);
-  const setConnectionState = useConnectionStore((s) => s.setConnectionState);
-  const setDevice = useConnectionStore((s) => s.setDevice);
+  const demoMode = useConnectionStore((s) => s.demoMode);
   const setError = useConnectionStore((s) => s.setError);
-  const setDemoMode = useConnectionStore((s) => s.setDemoMode);
 
-  // 検出デバイスはBleConnectionManager.scanForDevices()が返すため
-  // ローカルステートで管理する
+  // ペアリング済みデバイス一覧はローカルステートで管理する
   const [localDevices, setLocalDevices] = React.useState<BLEDevice[]>([]);
+  const [isListing, setIsListing] = React.useState(false);
+
+  const isConnecting = connectionState === 'connecting';
 
   // スキャンパルスアニメーション
   const scanPulse = useSharedValue(1);
 
   useEffect(() => {
-    if (connectionState === 'scanning') {
+    if (isListing) {
       scanPulse.value = withRepeat(
         withSequence(
           withTiming(1.15, { duration: 800, easing: Easing.inOut(Easing.ease) }),
@@ -186,85 +182,59 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = ({
       cancelAnimation(scanPulse);
       scanPulse.value = withTiming(1, { duration: 200 });
     }
-  }, [connectionState, scanPulse]);
+  }, [isListing, scanPulse]);
 
   const scanButtonAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scanPulse.value }],
   }));
 
-  // BleManagerの初期化
-  useEffect(() => {
-    bleManagerRef.current = new BleConnectionManager();
-
-    return () => {
-      bleManagerRef.current?.destroy();
-      bleManagerRef.current = null;
-    };
-  }, []);
-
-  // 接続成功時のDashboard遷移
-  useEffect(() => {
-    if (connectionState === 'connected' && navigation) {
-      // 少し待ってから遷移 (接続完了のフィードバックを見せるため)
-      const timer = setTimeout(() => {
-        navigation.replace('Dashboard');
-      }, 800);
-      return () => clearTimeout(timer);
-    }
-  }, [connectionState, navigation]);
-
-  // スキャン開始
+  // ペアリング済み一覧を取得
   const handleScan = useCallback(async () => {
-    if (!bleManagerRef.current) { return; }
-    if (connectionState === 'scanning') { return; }
+    if (isListing || isConnecting) { return; }
 
     setError(null);
-    setConnectionState('scanning');
     setLocalDevices([]);
+    setIsListing(true);
 
     try {
-      const devices = await bleManagerRef.current.scanForDevices();
+      const devices = await obdClient.listPairedDevices();
       setLocalDevices(devices);
-      setConnectionState('disconnected');
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Scan failed';
+      const message = err instanceof Error ? err.message : 'Failed to load paired devices';
       // setError はストア側で state を 'error' に設定する
       setError(message);
+    } finally {
+      setIsListing(false);
     }
-  }, [connectionState, setConnectionState, setError]);
+  }, [isListing, isConnecting, setError]);
 
   // デバイス接続
   const handleConnect = useCallback(
     async (deviceId: string) => {
-      if (!bleManagerRef.current) { return; }
-
       const device = localDevices.find((d) => d.id === deviceId);
       setError(null);
-      setConnectionState('connecting');
 
       try {
-        await bleManagerRef.current.connect(deviceId);
-        setDevice(device ?? { id: deviceId, name: null, rssi: null });
-        setConnectionState('connected');
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Connection failed';
-        // setError はストア側で state を 'error' に設定する
-        setError(message);
+        await obdClient.connect(device ?? { id: deviceId, name: null, rssi: null });
+      } catch {
+        // obdClient 側でエラー状態/メッセージをセットする
       }
     },
-    [localDevices, setConnectionState, setDevice, setError],
+    [localDevices, setError],
   );
+
+  const handleDisconnect = useCallback(() => {
+    setError(null);
+    void obdClient.disconnect();
+  }, [setError]);
 
   // デモモード開始
   const handleDemoMode = useCallback(() => {
-    setDemoMode(true);
-    setDevice({ id: 'DEMO', name: 'Demo Mode', rssi: null });
-    setConnectionState('connected');
-    mockDataProvider.start(200);
-  }, [setDemoMode, setDevice, setConnectionState]);
+    setError(null);
+    obdClient.startDemoMode();
+  }, [setError]);
 
-  const isScanning = connectionState === 'scanning';
-  const isConnecting = connectionState === 'connecting';
+  const isScanning = isListing;
 
   // デバイスリストアイテムのレンダラー
   const renderDevice = useCallback(
@@ -289,7 +259,7 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = ({
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Connect to ELM327</Text>
         <Text style={styles.headerSubtitle}>
-          Scan for nearby Bluetooth OBD adapters
+          Show paired Bluetooth (PIN: 1234/0000) OBD adapters
         </Text>
       </View>
 
@@ -309,11 +279,11 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = ({
             {isScanning ? (
               <View style={styles.scanningRow}>
                 <ActivityIndicator size="small" color={COLORS.text} />
-                <Text style={styles.scanButtonText}>Scanning...</Text>
+                <Text style={styles.scanButtonText}>Loading...</Text>
               </View>
             ) : (
               <Text style={styles.scanButtonText}>
-                {localDevices.length > 0 ? 'Scan Again' : 'Start Scan'}
+                {localDevices.length > 0 ? 'Refresh' : 'Show Paired Devices'}
               </Text>
             )}
           </TouchableOpacity>
@@ -341,10 +311,10 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = ({
           style={styles.successBanner}
         >
           <Text style={styles.successText}>
-            Connected to {connectedDevice?.name ?? 'ELM327'}
+            Connected to {demoMode ? 'Demo Mode' : (connectedDevice?.name ?? 'ELM327')}
           </Text>
           <Text style={styles.successSubtext}>
-            Navigating to dashboard...
+            Open the Dashboard tab to view live data
           </Text>
         </Animated.View>
       )}
@@ -360,6 +330,22 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = ({
           <Text style={styles.demoButtonHint}>OBD接続なしでUIを確認</Text>
         </TouchableOpacity>
       </View>
+
+      {/* 切断ボタン */}
+      {connectionState === 'connected' && (
+        <View style={styles.disconnectSection}>
+          <TouchableOpacity
+            style={styles.disconnectButton}
+            onPress={handleDisconnect}
+            disabled={isConnecting}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.disconnectButtonText}>
+              {demoMode ? 'Stop Demo' : 'Disconnect'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* デバイス一覧 */}
       <View style={styles.deviceListContainer}>
@@ -379,10 +365,10 @@ export const ConnectionScreen: React.FC<ConnectionScreenProps> = ({
             !isScanning ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyText}>
-                  Tap "Start Scan" to search for ELM327 devices
+                  Pair your OBD adapter in Android Bluetooth settings first
                 </Text>
                 <Text style={styles.emptyHint}>
-                  Make sure your ELM327 adapter is powered on
+                  Then tap "Show Paired Devices" to connect
                 </Text>
               </View>
             ) : null
@@ -472,6 +458,27 @@ const styles = StyleSheet.create({
     color: COLORS.textDim,
     fontSize: 11,
     marginTop: 2,
+  },
+
+  // 切断
+  disconnectSection: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  disconnectButton: {
+    backgroundColor: 'rgba(233, 69, 96, 0.12)',
+    borderWidth: 1,
+    borderColor: COLORS.accent,
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    alignItems: 'center',
+    minWidth: 200,
+  },
+  disconnectButtonText: {
+    color: COLORS.accent,
+    fontSize: 14,
+    fontWeight: '700',
   },
 
   // エラーバナー

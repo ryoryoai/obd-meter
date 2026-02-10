@@ -356,17 +356,43 @@ export class OBDProtocol {
       return [];
     }
 
-    // Split into hex byte tokens and parse
+    // Determine header length based on the mode
+    const mode = parseInt(pid.substring(0, 2), 16);
+    const responseMode = mode + 0x40;
+
+    // Split into hex byte tokens and parse (works when "spaces on").
     const tokens = cleaned.split(/\s+/).filter((t) => /^[0-9A-Fa-f]{2}$/.test(t));
-    const allBytes = tokens.map((t) => parseInt(t, 16));
+    let allBytes: number[] = [];
+
+    if (tokens.length > 0) {
+      allBytes = tokens.map((t) => parseInt(t, 16));
+    } else {
+      // Fallback for "spaces off" (ATS0) where the adapter returns a contiguous hex string
+      // like "410C1AF8". We locate the response header ("responseMode"+"pidCode") to avoid
+      // accidentally parsing non-hex noise like "SEARCHING...".
+      const pidCode = pid.substring(2, 4).toUpperCase();
+      const responseModeHex = responseMode.toString(16).toUpperCase().padStart(2, '0');
+      const headerHex = `${responseModeHex}${pidCode}`;
+
+      const compact = cleaned.replace(/\s+/g, '').toUpperCase();
+      const startIndex = compact.indexOf(headerHex);
+      if (startIndex === -1) {
+        return [];
+      }
+
+      const hexTail = compact.substring(startIndex);
+      for (let i = 0; i + 1 < hexTail.length; i += 2) {
+        const pair = hexTail.substring(i, i + 2);
+        if (!/^[0-9A-F]{2}$/.test(pair)) {
+          break;
+        }
+        allBytes.push(parseInt(pair, 16));
+      }
+    }
 
     if (allBytes.length === 0) {
       return [];
     }
-
-    // Determine header length based on the mode
-    const mode = parseInt(pid.substring(0, 2), 16);
-    const responseMode = mode + 0x40;
 
     // Find the start of our response (in case of multi-line or extra data)
     const responseStart = allBytes.indexOf(responseMode);

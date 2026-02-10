@@ -3,6 +3,7 @@ import { Text, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { DashboardScreen } from '../screens/DashboardScreen';
+import { ConnectionScreen } from '../screens/ConnectionScreen';
 import { BatteryHealthScreen } from '../screens/BatteryHealthScreen';
 import { HVSystemScreen } from '../screens/HVSystemScreen';
 import { LogScreen } from '../screens/LogScreen';
@@ -11,6 +12,7 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 
 /** タブナビゲーションのルート定義 */
 type TabParamList = {
+  Connect: undefined;
   Dashboard: undefined;
   Battery: undefined;
   'HV System': undefined;
@@ -36,6 +38,7 @@ const TAB_COLORS = {
  * コンポーネントでUnicode絵文字を表示する。
  */
 const TAB_ICONS: Record<keyof TabParamList, string> = {
+  Connect: '\u{1F50C}',    // electric plug
   Dashboard: '\u{1F3CE}',  // racing car (speedometer風)
   Battery: '\u{1F50B}',    // battery
   'HV System': '\u{26A1}', // high voltage
@@ -57,6 +60,7 @@ export function AppNavigator(): React.JSX.Element {
   return (
     <NavigationContainer>
       <Tab.Navigator
+        initialRouteName="Connect"
         screenOptions={({ route }) => ({
           headerShown: false,
           tabBarIcon: ({ focused }) => (
@@ -75,6 +79,11 @@ export function AppNavigator(): React.JSX.Element {
           tabBarStyle: styles.tabBar,
         })}
       >
+        <Tab.Screen
+          name="Connect"
+          component={ConnectionScreen}
+          options={{ tabBarLabel: 'Connect' }}
+        />
         <Tab.Screen
           name="Dashboard"
           component={DashboardScreen}

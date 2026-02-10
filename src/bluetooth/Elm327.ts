@@ -1,4 +1,6 @@
-import { BleConnectionManager } from './BleManager';
+export interface Elm327Transport {
+  sendCommand(command: string): Promise<string>;
+}
 
 /**
  * ELM327初期化シーケンスで送信するATコマンド群。
@@ -26,11 +28,11 @@ const COMMAND_INTERVAL_MS = 200;
  * OBDコマンドの送受信・レスポンスパースを行う。
  */
 export class Elm327 {
-  private bleManager: BleConnectionManager;
+  private transport: Elm327Transport;
   private ready = false;
 
-  constructor(bleManager: BleConnectionManager) {
-    this.bleManager = bleManager;
+  constructor(transport: Elm327Transport) {
+    this.transport = transport;
   }
 
   /**
@@ -51,7 +53,7 @@ export class Elm327 {
 
     for (const { command, description } of INIT_COMMANDS) {
       try {
-        const response = await this.bleManager.sendCommand(command);
+        const response = await this.transport.sendCommand(command);
 
         // ATZはリセットコマンドなので、応答後に追加待機が必要
         if (command === 'ATZ') {
@@ -92,7 +94,7 @@ export class Elm327 {
       throw new Error('ELM327 is not initialized. Call initialize() first.');
     }
 
-    const response = await this.bleManager.sendCommand(pid);
+    const response = await this.transport.sendCommand(pid);
 
     if (this.isErrorResponse(response)) {
       throw new Error(`OBD command "${pid}" error: ${response}`);
@@ -143,7 +145,7 @@ export class Elm327 {
    */
   async reset(): Promise<void> {
     try {
-      await this.bleManager.sendCommand('ATZ');
+      await this.transport.sendCommand('ATZ');
       await this.delay(RESET_SETTLE_MS);
     } catch {
       // リセットコマンドの失敗は無視（接続切れ等）

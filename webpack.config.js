@@ -34,6 +34,7 @@ module.exports = {
       'react-native$': 'react-native-web',
       // ネイティブ専用モジュールをモックに差し替え
       'react-native-ble-plx': path.resolve(__dirname, 'web/mocks/ble-plx.js'),
+      'react-native-bluetooth-classic': path.resolve(__dirname, 'web/mocks/bluetooth-classic.js'),
       'expo-sqlite': path.resolve(__dirname, 'web/mocks/expo-sqlite.js'),
       '@shopify/react-native-skia': path.resolve(__dirname, 'web/mocks/skia.js'),
       'victory-native': path.resolve(__dirname, 'web/mocks/victory-native.js'),

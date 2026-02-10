@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -18,6 +18,7 @@ import { GaugeMeter } from '../components/meters/GaugeMeter';
 import { BarMeter } from '../components/meters/BarMeter';
 import { DigitalMeter } from '../components/meters/DigitalMeter';
 import { BatteryIndicator } from '../components/meters/BatteryIndicator';
+import { PriusSilhouette } from '../components/PriusSilhouette';
 import { useOBDStore } from '../store/obdStore';
 import { useConnectionStore } from '../store/connectionStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -171,6 +172,11 @@ export const DashboardScreen: React.FC = () => {
           <Text style={styles.envValue}>{acSetTemp.toFixed(0)}</Text>
           <Text style={styles.envUnit}>{'\u00B0C'}</Text>
         </View>
+      </View>
+
+      {/* プリウス線画背景 */}
+      <View style={styles.silhouetteContainer} pointerEvents="none">
+        <PriusSilhouette width={700} height={334} opacity={0.12} />
       </View>
 
       {/* メインメーターエリア */}
@@ -328,6 +334,17 @@ const styles = StyleSheet.create({
     color: THEME.textDim,
     fontSize: 12,
     fontWeight: '500',
+  },
+
+  // プリウス線画背景
+  silhouetteContainer: {
+    position: 'absolute',
+    bottom: 60,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 0,
   },
 
   // 環境情報バー
