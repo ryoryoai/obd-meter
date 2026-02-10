@@ -38,7 +38,7 @@ export class ClassicBluetoothConnectionManager implements Elm327Interface {
       id: d.address,
       name: d.name ?? null,
       // RSSI isn't always available for bonded devices. Normalize to null if missing/invalid.
-      rssi: typeof d.rssi === 'number' && Number.isFinite(d.rssi) ? d.rssi : null,
+      rssi: Number.isFinite(Number(d.rssi)) ? Number(d.rssi) : null,
     }));
   }
 
@@ -75,13 +75,26 @@ export class ClassicBluetoothConnectionManager implements Elm327Interface {
     // Clean up any prior state.
     await this.disconnect().catch(() => undefined);
 
-    const device = await RNBluetoothClassic.connectToDevice(address, {
+    const connectOptions = {
       connectionType: 'delimited',
       delimiter: '>',
       charset: 'ascii',
-      // Some ELM327 adapters are flaky with secure sockets even after pairing.
-      secureSocket: false,
-    });
+    } as const;
+
+    // Some ELM327 adapters prefer insecure sockets; others require secure sockets.
+    // Try insecure first, then fallback to secure.
+    let device: BluetoothDevice;
+    try {
+      device = await RNBluetoothClassic.connectToDevice(address, {
+        ...connectOptions,
+        secureSocket: false,
+      });
+    } catch {
+      device = await RNBluetoothClassic.connectToDevice(address, {
+        ...connectOptions,
+        secureSocket: true,
+      });
+    }
 
     this.connectedDevice = device;
 
@@ -169,7 +182,7 @@ export class ClassicBluetoothConnectionManager implements Elm327Interface {
 
   private handleIncomingMessage(message: string): void {
     // Defensive cleanup: the native delimiter drops '>' but some configs might include it.
-    const cleaned = message.replace(/>/g, '').replace(/\u0000/g, '').trim();
+    const cleaned = message.replace(/>/g, '').split('\u0000').join('').trim();
 
     if (this.responseResolve) {
       if (this.responseTimer) {
