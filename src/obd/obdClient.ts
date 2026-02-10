@@ -25,6 +25,7 @@ const DEFAULT_PIDS: ReadonlyArray<string> = [
   '0146', // Ambient
   'TOYOTA_CABIN_TEMP',
   'TOYOTA_AC_STATUS',
+  'TOYOTA_AC_POWER',
   'TOYOTA_AC_SET_TEMP',
 
   // Useful extras (polled only if supported)

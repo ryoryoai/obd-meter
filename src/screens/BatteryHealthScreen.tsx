@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, View, Text, StatusBar } from 'react-native';
 
-import { GaugeMeter } from '../components/meters/GaugeMeter';
 import { DigitalMeter } from '../components/meters/DigitalMeter';
 import { useBatteryHealthStore } from '../store/batteryHealthStore';
 import { THEME } from '../utils/theme';
@@ -140,25 +139,18 @@ export function BatteryHealthScreen(): React.JSX.Element {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={styles.headerTitle}>Battery Health</Text>
-          <View style={[styles.healthBadge, { backgroundColor: health.color + '22', borderColor: health.color }]}>
-            <View style={[styles.healthDot, { backgroundColor: health.color }]} />
-            <Text style={[styles.healthLabel, { color: health.color }]}>
-              {health.label}
-            </Text>
+          <View style={styles.headerBadgeRow}>
+            <View style={[styles.healthBadge, { backgroundColor: health.color + '22', borderColor: health.color }]}>
+              <View style={[styles.healthDot, { backgroundColor: health.color }]} />
+              <Text style={[styles.healthLabel, { color: health.color }]}>
+                {health.label}
+              </Text>
+            </View>
+            <View style={styles.sohBadge}>
+              <Text style={styles.sohLabel}>SOH</Text>
+              <Text style={[styles.sohValue, { color: health.color }]}>{soh.toFixed(0)}%</Text>
+            </View>
           </View>
-        </View>
-
-        <View style={styles.headerCenter}>
-          <GaugeMeter
-            value={soh}
-            min={0}
-            max={100}
-            unit="%"
-            label="SOH"
-            size={100}
-            warningThreshold={70}
-            dangerThreshold={50}
-          />
         </View>
 
         <View style={styles.headerRight}>
@@ -433,9 +425,26 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.5,
   },
-  headerCenter: {
+  headerBadgeRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    marginTop: 4,
+    gap: 10,
+  },
+  sohBadge: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+  },
+  sohLabel: {
+    color: THEME.textDim,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  sohValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
   },
   headerRight: {
     flex: 1,

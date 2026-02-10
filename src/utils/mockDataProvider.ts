@@ -31,7 +31,9 @@ interface MockState {
   totalTime: number;            // 総走行時間(ms)
   lastEvObservationTemp: number; // 最後のEV閾値観測温度
   ambientTemp: number;          // 外気温 (°C)
-  cabinTemp: number;            // 内気温 (°C)
+  cabinTempFront: number;       // 内気温 フロント (°C)
+  cabinTempMid: number;         // 内気温 ミドル (°C)
+  cabinTempRear: number;        // 内気温 リア (°C)
   acOn: boolean;                // エアコンコンプレッサーON/OFF
   acSetTemp: number;            // エアコン設定温度 (°C)
 }
@@ -98,7 +100,9 @@ class MockDataProvider {
       totalTime: 0,
       lastEvObservationTemp: 0,
       ambientTemp: 18,        // 春秋の外気温
-      cabinTemp: 22,          // 初期内気温
+      cabinTempFront: 22,     // フロント内気温
+      cabinTempMid: 23,       // ミドル内気温
+      cabinTempRear: 24,      // リア内気温
       acOn: true,             // エアコンON
       acSetTemp: 24,          // 設定温度24°C
     };
@@ -195,13 +199,24 @@ class MockDataProvider {
     this.state.ambientTemp = jitter(this.state.ambientTemp, 0.02);
     this.state.ambientTemp = Math.max(5, Math.min(38, this.state.ambientTemp));
 
-    // 内気温: エアコンONなら設定温度に向かって変化、OFFなら外気温に近づく
+    // 内気温: 3ゾーン独立シミュレーション
+    // フロント: エアコン吹出口に最も近い → 収束が最速
+    // ミドル: 中間的な収束速度
+    // リア: 吹出口から最も遠い → 収束が最遅、外気温の影響大
     if (this.state.acOn) {
-      this.state.cabinTemp = lerp(this.state.cabinTemp, this.state.acSetTemp, smoothFactor * 0.02);
+      this.state.cabinTempFront = lerp(this.state.cabinTempFront, this.state.acSetTemp, smoothFactor * 0.035);
+      this.state.cabinTempMid = lerp(this.state.cabinTempMid, this.state.acSetTemp, smoothFactor * 0.020);
+      this.state.cabinTempRear = lerp(this.state.cabinTempRear, this.state.acSetTemp, smoothFactor * 0.012);
     } else {
-      this.state.cabinTemp = lerp(this.state.cabinTemp, this.state.ambientTemp, smoothFactor * 0.005);
+      this.state.cabinTempFront = lerp(this.state.cabinTempFront, this.state.ambientTemp, smoothFactor * 0.008);
+      this.state.cabinTempMid = lerp(this.state.cabinTempMid, this.state.ambientTemp, smoothFactor * 0.006);
+      this.state.cabinTempRear = lerp(this.state.cabinTempRear, this.state.ambientTemp, smoothFactor * 0.005);
     }
-    this.state.cabinTemp = jitter(this.state.cabinTemp, 0.05);
+    // リアは日射や窓面積の影響で外気温寄りに微調整
+    this.state.cabinTempRear = lerp(this.state.cabinTempRear, this.state.ambientTemp, smoothFactor * 0.003);
+    this.state.cabinTempFront = jitter(this.state.cabinTempFront, 0.05);
+    this.state.cabinTempMid = jitter(this.state.cabinTempMid, 0.05);
+    this.state.cabinTempRear = jitter(this.state.cabinTempRear, 0.08);
 
     // エアコン設定: たまにON/OFF切り替え (約60秒に1回の確率)
     if (Math.random() < dt / 60000) {
@@ -234,9 +249,18 @@ class MockDataProvider {
 
     // 環境データ
     store.updatePidValue('0146', jitter(this.state.ambientTemp, 0.3), 'MOCK');          // 外気温
-    store.updatePidValue('TOYOTA_CABIN_TEMP', jitter(this.state.cabinTemp, 0.2), 'MOCK'); // 内気温
+    const cabinAvg = (this.state.cabinTempFront + this.state.cabinTempMid + this.state.cabinTempRear) / 3;
+    store.updatePidValue('TOYOTA_CABIN_TEMP', jitter(cabinAvg, 0.2), 'MOCK');               // 平均内気温
+    store.updatePidValue('CABIN_TEMP_FRONT', jitter(this.state.cabinTempFront, 0.2), 'MOCK'); // フロント
+    store.updatePidValue('CABIN_TEMP_MID', jitter(this.state.cabinTempMid, 0.2), 'MOCK');     // ミドル
+    store.updatePidValue('CABIN_TEMP_REAR', jitter(this.state.cabinTempRear, 0.2), 'MOCK');   // リア
     store.updatePidValue('TOYOTA_AC_STATUS', this.state.acOn ? 1 : 0, 'MOCK');           // AC ON/OFF
     store.updatePidValue('TOYOTA_AC_SET_TEMP', this.state.acSetTemp, 'MOCK');             // AC設定温度
+    // A/Cコンプレッサー電力: ON時は温度差に応じて0.5-2.5kW
+    const acPower = this.state.acOn
+      ? Math.max(0.3, Math.min(3.0, Math.abs(cabinAvg - this.state.acSetTemp) * 0.4 + 0.5))
+      : 0;
+    store.updatePidValue('TOYOTA_AC_POWER', jitter(acPower, 0.15), 'MOCK');              // AC電力(kW)
 
     // 計算値 (燃費系)
     const instantFuel = this.state.speed > 5 && this.state.rpm > 0

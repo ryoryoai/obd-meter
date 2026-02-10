@@ -6,6 +6,7 @@ import { DashboardScreen } from '../screens/DashboardScreen';
 import { ConnectionScreen } from '../screens/ConnectionScreen';
 import { BatteryHealthScreen } from '../screens/BatteryHealthScreen';
 import { HVSystemScreen } from '../screens/HVSystemScreen';
+import { ClimateScreen } from '../screens/ClimateScreen';
 import { LogScreen } from '../screens/LogScreen';
 import { AnalysisScreen } from '../screens/AnalysisScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
@@ -16,6 +17,7 @@ type TabParamList = {
   Dashboard: undefined;
   Battery: undefined;
   'HV System': undefined;
+  Climate: undefined;
   Log: undefined;
   Analysis: undefined;
   Settings: undefined;
@@ -42,6 +44,7 @@ const TAB_ICONS: Record<keyof TabParamList, string> = {
   Dashboard: '\u{1F3CE}',  // racing car (speedometer風)
   Battery: '\u{1F50B}',    // battery
   'HV System': '\u{26A1}', // high voltage
+  Climate: '\u{1F321}',    // thermometer
   Log: '\u{1F4CB}',        // clipboard (list風)
   Analysis: '\u{1F4CA}',   // bar chart (chart風)
   Settings: '\u{2699}',    // gear
@@ -98,6 +101,11 @@ export function AppNavigator(): React.JSX.Element {
           name="HV System"
           component={HVSystemScreen}
           options={{ tabBarLabel: 'HV System' }}
+        />
+        <Tab.Screen
+          name="Climate"
+          component={ClimateScreen}
+          options={{ tabBarLabel: 'Climate' }}
         />
         <Tab.Screen
           name="Log"

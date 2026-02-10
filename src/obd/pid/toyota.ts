@@ -124,6 +124,18 @@ export const ZVW30_ALIAS_PIDS: Record<string, PidDefinition> = {
     decode: compileTorqueEquation('{A:5}'),
   },
 
+  TOYOTA_AC_POWER: {
+    pid: 'TOYOTA_AC_POWER',
+    request: '217D', // A/C consumption power (Watts) (Hybrid ECU)
+    header: '7E2',
+    name: 'A/C Consumption Power',
+    shortName: 'A/C Pwr',
+    unit: 'kW',
+    min: 0,
+    max: 5,
+    decode: compileTorqueEquation('C * 50 / 1000'),
+  },
+
   TOYOTA_AC_SET_TEMP: {
     pid: 'TOYOTA_AC_SET_TEMP',
     request: '2129', // Set Temperature (Driver side) (A/C ECU)
@@ -197,4 +209,3 @@ export async function probeToyotaPids(
 
   return supported;
 }
-

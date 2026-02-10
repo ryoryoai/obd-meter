@@ -5,18 +5,19 @@
  * デモモードを自動開始してメーターUIを即座に確認できる。
  */
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, useWindowDimensions } from 'react-native';
 import Svg, { Path, Circle, Rect, Line } from 'react-native-svg';
 import { DashboardScreen } from './src/screens/DashboardScreen';
 import { BatteryHealthScreen } from './src/screens/BatteryHealthScreen';
 import { HVSystemScreen } from './src/screens/HVSystemScreen';
+import { ClimateScreen } from './src/screens/ClimateScreen';
 import { AnalysisScreen } from './src/screens/AnalysisScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { useConnectionStore } from './src/store/connectionStore';
 import { mockDataProvider } from './src/utils/mockDataProvider';
 import { THEME } from './src/utils/theme';
 
-type TabName = 'Dashboard' | 'Battery' | 'HV System' | 'Analysis' | 'Settings';
+type TabName = 'Dashboard' | 'Battery' | 'HV System' | 'Climate' | 'Analysis' | 'Settings';
 
 // --- SVG Icon Components ---
 
@@ -86,6 +87,25 @@ function HVSystemIcon({ color }: { color: string }) {
   );
 }
 
+/** Climate: 温度計 */
+function ClimateIcon({ color }: { color: string }) {
+  return (
+    <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 18 18">
+      {/* 温度計のバルブ */}
+      <Circle cx="9" cy="14" r="3" fill="none" stroke={color} strokeWidth={1.6} />
+      <Circle cx="9" cy="14" r="1.2" fill={color} />
+      {/* 温度計の管 */}
+      <Rect x="7.5" y="2" width="3" height="10" rx="1.5" fill="none" stroke={color} strokeWidth={1.4} />
+      {/* 水銀柱 */}
+      <Line x1="9" y1="12" x2="9" y2="6" stroke={color} strokeWidth={1.2} strokeLinecap="round" />
+      {/* 目盛り */}
+      <Line x1="10.8" y1="5" x2="12" y2="5" stroke={color} strokeWidth={0.8} />
+      <Line x1="10.8" y1="7.5" x2="12" y2="7.5" stroke={color} strokeWidth={0.8} />
+      <Line x1="10.8" y1="10" x2="12" y2="10" stroke={color} strokeWidth={0.8} />
+    </Svg>
+  );
+}
+
 /** Analysis: 棒グラフ風 */
 function AnalysisIcon({ color }: { color: string }) {
   return (
@@ -120,17 +140,26 @@ const TAB_ICONS: Record<TabName, React.FC<{ color: string }>> = {
   Dashboard: DashboardIcon,
   Battery: BatteryIcon,
   'HV System': HVSystemIcon,
+  Climate: ClimateIcon,
   Analysis: AnalysisIcon,
   Settings: SettingsIcon,
 };
 
-const TABS: TabName[] = ['Dashboard', 'Battery', 'HV System', 'Analysis', 'Settings'];
+const TABS: TabName[] = ['Dashboard', 'Battery', 'HV System', 'Climate', 'Analysis', 'Settings'];
+
+const ASPECT = 16 / 9;
 
 function App(): React.JSX.Element {
   const [activeTab, setActiveTab] = useState<TabName>('Dashboard');
   const setDemoMode = useConnectionStore((s) => s.setDemoMode);
   const setDevice = useConnectionStore((s) => s.setDevice);
   const setConnectionState = useConnectionStore((s) => s.setConnectionState);
+  const { width: winW, height: winH } = useWindowDimensions();
+
+  // 16:9 固定サイズ計算 (letterbox)
+  const windowAspect = winW / winH;
+  const appW = windowAspect > ASPECT ? winH * ASPECT : winW;
+  const appH = windowAspect > ASPECT ? winH : winW / ASPECT;
 
   // デモモード自動開始
   useEffect(() => {
@@ -152,6 +181,8 @@ function App(): React.JSX.Element {
         return <BatteryHealthScreen />;
       case 'HV System':
         return <HVSystemScreen />;
+      case 'Climate':
+        return <ClimateScreen />;
       case 'Analysis':
         return <AnalysisScreen />;
       case 'Settings':
@@ -162,7 +193,8 @@ function App(): React.JSX.Element {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.outerContainer}>
+      <View style={[styles.appContainer, { width: appW, height: appH }]}>
       <View style={styles.content}>{renderScreen()}</View>
       <View style={styles.tabBar}>
         {TABS.map((tabName) => {
@@ -193,14 +225,21 @@ function App(): React.JSX.Element {
           );
         })}
       </View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  outerContainer: {
     flex: 1,
+    backgroundColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  appContainer: {
     backgroundColor: THEME.bg,
+    overflow: 'hidden',
   },
   content: {
     flex: 1,

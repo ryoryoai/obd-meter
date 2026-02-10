@@ -30,6 +30,7 @@ import { chromium } from '@playwright/test';
   const tabScreenshots = [
     { testId: 'tab-battery', file: 'screenshot-battery.png', name: 'Battery' },
     { testId: 'tab-hv-system', file: 'screenshot-hvsystem.png', name: 'HV System' },
+    { testId: 'tab-climate', file: 'screenshot-climate.png', name: 'Climate' },
     { testId: 'tab-analysis', file: 'screenshot-analysis.png', name: 'Analysis' },
     { testId: 'tab-settings', file: 'screenshot-settings.png', name: 'Settings' },
   ];

@@ -11,9 +11,8 @@ interface Props {
 /**
  * ZVW30 Prius (3rd gen) サイドビュー線画
  *
- * 外部SVG(base64 PNG埋め込み)を背景として表示。
- * 元画像は暗背景に白線画のため、mix-blend-mode: screen で
- * 暗部を透過させ白線のみ表示する。
+ * 背景透過ベクターSVGを背景として表示。
+ * 白線画のみのSVGのため blend-mode 不要。
  */
 export const PriusSilhouette: React.FC<Props> = ({
   width = 600,
@@ -32,11 +31,7 @@ export const PriusSilhouette: React.FC<Props> = ({
         source={{ uri: '/prius-silhouette.svg' }}
         style={[
           styles.image,
-          {
-            opacity,
-            // @ts-expect-error web-only CSS: 暗い背景を透過し白線のみ残す
-            mixBlendMode: 'screen',
-          },
+          { opacity },
         ]}
         resizeMode="contain"
       />
