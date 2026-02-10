@@ -1,257 +1,200 @@
-import { PidDefinition } from '../../types/obd';
+import type { PidDefinition } from '../../types/obd';
+
+import { compileTorqueEquation } from '../torqueEquation';
+import { PRIUSCHAT_METRIC_PIDS } from './priuschatMetric';
 
 /**
- * Toyota ZVW30 Prius (3rd generation, 2009-2015) Hybrid-specific PIDs.
+ * Toyota ZVW30 Prius (3rd gen) signals and PriusChat/Torque-derived custom PIDs.
  *
- * These use OBD-II Mode 21 (Toyota-specific) and Mode 22 (enhanced diagnostic).
- * PID addresses and decode formulas are based on known ZVW30 ECU data from
- * community-sourced PID databases (Torque app, Hybrid Assistant, PriusChat).
+ * Data source for the large PID list:
+ * - PriusChat community sheet (Vincent1449p) "Metric" tab (Torque format)
+ *   See `src/obd/pid/priuschatMetric.ts` (generated).
  *
- * IMPORTANT: Actual PID addresses and byte positions may vary depending on
- * ECU firmware version and market region (JDM/USDM/EDM). The values below
- * represent the most commonly documented mappings.
- *
- * Mode 22 requests are sent as: 22 XX XX (2-byte PID)
- * The response format is: 62 XX XX [data bytes...]
- *
- * For this module, PID keys use a simplified 4-char format where the first
- * two characters represent the mode (21/22) and the last two are a logical index.
+ * Notes:
+ * - Many Toyota signals require targeting a specific ECU by setting the CAN TX header
+ *   using ELM327 `ATSH` (e.g. 7E2 = Hybrid ECU, 7C4 = A/C ECU).
+ * - ModeAndPID values in that sheet are 1-byte PIDs using services like 01 and 21.
  */
-export const TOYOTA_PIDS: Record<string, PidDefinition> = {
-  // --- HV Battery State of Charge ---
-  // Source: Hybrid battery ECU (HV ECU)
-  // Torque PID: 0x22, 0x0138 (example mapping)
-  // Raw byte represents SOC as a direct percentage value.
-  // ZVW30 typically shows SOC in the range of ~20-80% during normal operation
-  // (the ECU manages this window to preserve battery life).
-  '2101': {
-    pid: '2101',
-    name: 'HV Battery SOC',
+
+// --- App-facing alias signals used by the existing UI ------------------------
+
+function decodeHvPackVoltageFrom2181(bytes: number[]): number {
+  // PriusChat metric rows V01..V14 are 14 block voltages packed as 14x 16-bit values.
+  // Each block voltage: (hi*256+lo) * 79.99 / 65535
+  // Pack voltage ~ sum(block voltages)
+  const needed = 28;
+  if (bytes.length < needed) return 0;
+
+  const scale = 79.99 / 65535;
+  let sum = 0;
+  for (let i = 0; i < needed; i += 2) {
+    sum += (bytes[i] * 256 + bytes[i + 1]) * scale;
+  }
+  return sum;
+}
+
+function decodeHvBatteryTempAvgFrom2187(bytes: number[]): number {
+  // PriusChat metric rows TB 1..TB 3 (2187):
+  // (hi*256+lo) * 255.9 / 65535 - 50
+  // TB1 uses bytes C,D (index 2,3), TB2 uses E,F (4,5), TB3 uses G,H (6,7)
+  if (bytes.length < 8) return 0;
+
+  const scale = 255.9 / 65535;
+  const toTemp = (hi: number, lo: number) => (hi * 256 + lo) * scale - 50;
+  const t1 = toTemp(bytes[2], bytes[3]);
+  const t2 = toTemp(bytes[4], bytes[5]);
+  const t3 = toTemp(bytes[6], bytes[7]);
+  return (t1 + t2 + t3) / 3;
+}
+
+/**
+ * These ids are used by the UI directly (DashboardScreen etc.).
+ * They map to PriusChat/Torque requests + headers under the hood.
+ */
+export const ZVW30_ALIAS_PIDS: Record<string, PidDefinition> = {
+  TOYOTA_HV_SOC: {
+    pid: 'TOYOTA_HV_SOC',
+    request: '015B', // State of Charge, requires Hybrid ECU header
+    header: '7E2',
+    name: 'HV Battery State of Charge',
     shortName: 'SOC',
     unit: '%',
     min: 0,
     max: 100,
-    decode: (b) => b[0] / 2,
+    decode: compileTorqueEquation('A * 20 / 51'),
   },
 
-  // --- HV Battery Pack Voltage ---
-  // The NiMH battery pack in ZVW30 is nominally 201.6V (28 modules x 7.2V).
-  // Under load it ranges roughly 180-252V.
-  // Two data bytes: voltage = (A * 256 + B) / 10
-  '2102': {
-    pid: '2102',
-    name: 'HV Battery Voltage',
+  TOYOTA_HV_CURRENT: {
+    pid: 'TOYOTA_HV_CURRENT',
+    request: '2198', // Batt Pack Current Val
+    header: '7E2',
+    name: 'HV Battery Pack Current',
+    shortName: 'HV Amp',
+    unit: 'A',
+    min: -200,
+    max: 200,
+    decode: compileTorqueEquation('(A * 256 + B) / 100 - 327.68'),
+  },
+
+  TOYOTA_HV_VOLTAGE: {
+    pid: 'TOYOTA_HV_VOLTAGE',
+    request: '2181', // Battery block voltages V01..V14 are contained in this response
+    header: '7E2',
+    name: 'HV Battery Pack Voltage',
     shortName: 'HV Volt',
     unit: 'V',
     min: 0,
     max: 300,
-    decode: (b) => (b[0] * 256 + b[1]) / 10,
+    decode: decodeHvPackVoltageFrom2181,
   },
 
-  // --- HV Battery Current ---
-  // Signed value. Positive = discharging, negative = charging (regen).
-  // Two bytes, signed: current = ((A * 256 + B) - 32768) / 100
-  // This gives a range of approximately -327.68A to +327.67A,
-  // though ZVW30 typically stays within -150A to +150A.
-  '2103': {
-    pid: '2103',
-    name: 'HV Battery Current',
-    shortName: 'HV Amp',
-    unit: 'A',
-    min: -150,
-    max: 150,
-    decode: (b) => ((b[0] * 256 + b[1]) - 32768) / 100,
-  },
-
-  // --- MG1 (Motor/Generator 1) RPM ---
-  // MG1 is connected to the sun gear of the power-split device.
-  // It primarily functions as a starter/generator.
-  // Signed 16-bit value: RPM = (A * 256 + B) - 32768
-  // MG1 can spin in both directions depending on vehicle state.
-  '2104': {
-    pid: '2104',
-    name: 'MG1 RPM',
-    shortName: 'MG1',
-    unit: 'rpm',
-    min: -10000,
-    max: 10000,
-    decode: (b) => (b[0] * 256 + b[1]) - 32768,
-  },
-
-  // --- MG2 (Traction Motor) RPM ---
-  // MG2 is the primary traction motor connected to the ring gear.
-  // It provides direct drive torque to the wheels.
-  // Signed 16-bit value: RPM = (A * 256 + B) - 32768
-  '2105': {
-    pid: '2105',
-    name: 'MG2 RPM',
-    shortName: 'MG2',
-    unit: 'rpm',
-    min: -10000,
-    max: 10000,
-    decode: (b) => (b[0] * 256 + b[1]) - 32768,
-  },
-
-  // --- Inverter Temperature ---
-  // The inverter converts DC from the HV battery to 3-phase AC for MG1/MG2.
-  // Temperature is reported with a -40 offset (same as standard OBD coolant temp).
-  '2106': {
-    pid: '2106',
-    name: 'Inverter Temperature',
-    shortName: 'Inv Temp',
-    unit: '\u00B0C',
-    min: -40,
-    max: 150,
-    decode: (b) => b[0] - 40,
-  },
-
-  // --- HV Battery Temperature ---
-  // Average temperature of the NiMH battery pack.
-  // Reported with -40 offset.
-  // The battery cooling fan adjusts based on this value.
-  '2107': {
-    pid: '2107',
-    name: 'HV Battery Temperature',
-    shortName: 'Bat Temp',
-    unit: '\u00B0C',
-    min: -40,
-    max: 100,
-    decode: (b) => b[0] - 40,
-  },
-
-  // --- EV Mode Status ---
-  // Indicates whether the vehicle is currently in EV (electric-only) mode.
-  // 0 = HV mode (engine may run), 1 = EV mode (engine off, electric only).
-  // On ZVW30, EV mode is limited to low speeds (~40 km/h) and light throttle.
-  '2108': {
-    pid: '2108',
-    name: 'EV Mode',
-    shortName: 'EV',
-    unit: '',
-    min: 0,
-    max: 1,
-    decode: (b) => b[0] & 0x01,
-  },
-
-  // --- HV Battery Block Voltages ---
-  // ZVW30のNiMH バッテリーパックは28モジュールで構成。
-  // 14ブロック (各2モジュール直列) の電圧をまとめて読み取る。
-  // Mode 22 PID 0x2109 → レスポンス: 28バイト (14ペア × 2バイト)
-  // 各ブロック電圧 = (A * 256 + B) / 1000 (V)
-  // このPIDはデコード関数で先頭ブロック(index 0)のみ返す。
-  // 全ブロックの解析はbatteryHealthStoreで行う。
-  '2109': {
-    pid: '2109',
-    name: 'HV Battery Block Voltages',
-    shortName: 'Blk V',
-    unit: 'V',
-    min: 0,
-    max: 20,
-    decode: (b) => (b.length >= 2) ? (b[0] * 256 + b[1]) / 1000 : 0,
-  },
-
-  // --- HV Battery Temperature Distribution ---
-  // 3つの温度センサー (バッテリーパック内の前・中・後)
-  // Mode 22 PID 0x210A → レスポンス: 3バイト
-  // 各バイト: temperature = byte - 40 (°C)
-  // このPIDはデコード関数で先頭センサーのみ返す。
-  '210A': {
-    pid: '210A',
-    name: 'HV Battery Temp Distribution',
-    shortName: 'Bat Temps',
-    unit: '\u00B0C',
-    min: -40,
-    max: 100,
-    decode: (b) => (b.length >= 1) ? b[0] - 40 : 0,
-  },
-
-  // --- 12V Auxiliary Battery Voltage ---
-  // 補機バッテリー (12V鉛蓄電池) の電圧
-  // Mode 22 PID 0x210B → レスポンス: 1バイト
-  // voltage = byte / 10 (V)
-  '210B': {
-    pid: '210B',
-    name: '12V Auxiliary Battery',
-    shortName: '12V Bat',
-    unit: 'V',
-    min: 0,
-    max: 20,
-    decode: (b) => (b.length >= 1) ? b[0] / 10 : 0,
-  },
-
-  // --- Cabin Temperature (内気温) ---
-  // エアコンECUから取得する車室内温度センサー値
-  // Mode 22 PID 0x210C → レスポンス: 1バイト
-  // temperature = byte - 40 (°C)
-  '210C': {
-    pid: '210C',
-    name: 'Cabin Temperature',
-    shortName: 'Cabin',
-    unit: '\u00B0C',
-    min: -40,
+  TOYOTA_HV_TEMP: {
+    pid: 'TOYOTA_HV_TEMP',
+    request: '2187', // TB Intake / TB1-3 are contained in this response
+    header: '7E2',
+    name: 'HV Battery Temperature (avg)',
+    shortName: 'HV Temp',
+    unit: 'C',
+    min: -50,
     max: 80,
-    decode: (b) => (b.length >= 1) ? b[0] - 40 : 0,
+    decode: decodeHvBatteryTempAvgFrom2187,
   },
 
-  // --- A/C Compressor Status & Set Temperature ---
-  // エアコンコンプレッサー状態と設定温度
-  // Mode 22 PID 0x210D → レスポンス: 2バイト
-  // Byte A: コンプレッサーON/OFF (bit0: 1=ON, 0=OFF)
-  // Byte B: 設定温度 = byte / 2 (°C) (例: 50→25°C)
-  '210D': {
-    pid: '210D',
-    name: 'A/C Compressor Status',
+  TOYOTA_CABIN_TEMP: {
+    pid: 'TOYOTA_CABIN_TEMP',
+    request: '2121', // Room Temp Sensor (A/C ECU)
+    header: '7C4',
+    name: 'Cabin Temperature (Room Sensor)',
+    shortName: 'Cabin',
+    unit: 'C',
+    min: -20,
+    max: 60,
+    decode: compileTorqueEquation('A * 63.75 / 255 - 6.5'),
+  },
+
+  TOYOTA_AC_STATUS: {
+    pid: 'TOYOTA_AC_STATUS',
+    request: '2175', // Aircon Gate Status (Hybrid ECU)
+    header: '7E2',
+    name: 'A/C Status',
     shortName: 'A/C',
     unit: '',
     min: 0,
     max: 1,
-    decode: (b) => (b.length >= 1) ? b[0] & 0x01 : 0,
+    decode: compileTorqueEquation('{A:5}'),
+  },
+
+  TOYOTA_AC_SET_TEMP: {
+    pid: 'TOYOTA_AC_SET_TEMP',
+    request: '2129', // Set Temperature (Driver side) (A/C ECU)
+    header: '7C4',
+    name: 'A/C Set Temperature (Driver)',
+    shortName: 'SET',
+    unit: 'C',
+    min: 17.5,
+    max: 32.5,
+    decode: compileTorqueEquation('A / 2 + 17.5'),
   },
 };
 
-/**
- * Toyota-specific supported PID query.
- * Unlike standard Mode 01 queries, Toyota enhanced PIDs typically require
- * direct addressing - there is no standardized "supported PIDs" bitmask query
- * for Mode 21/22. Discovery is done by attempting to read each known PID
- * and checking for a valid response vs. a "no data" / "7F" error.
- */
-export const TOYOTA_PID_LIST = Object.keys(TOYOTA_PIDS);
+// Merge alias signals with the full PriusChat metric list.
+export const TOYOTA_PIDS: Record<string, PidDefinition> = {
+  ...ZVW30_ALIAS_PIDS,
+  ...PRIUSCHAT_METRIC_PIDS,
+};
+
+export const ZVW30_ALIAS_PID_LIST = Object.keys(ZVW30_ALIAS_PIDS);
 
 /**
- * Probe which Toyota-specific PIDs are supported by the connected ECU.
- * Returns the subset of known PIDs that the vehicle responds to.
+ * Toyota PID probing.
  *
- * @param sendCommand - Function that sends an OBD command and returns the raw response
- * @returns Array of supported Toyota PID strings
+ * The PriusChat list is large; by default we probe only the alias signals used by the UI.
+ * Pass an explicit list to probe more.
  */
 export async function probeToyotaPids(
   sendCommand: (command: string) => Promise<string>,
+  signalIds: string[] = ZVW30_ALIAS_PID_LIST,
 ): Promise<string[]> {
   const supported: string[] = [];
 
-  for (const pid of TOYOTA_PID_LIST) {
-    try {
-      const mode = pid.substring(0, 2);
-      const pidCode = pid.substring(2, 4);
-      const response = await sendCommand(`${mode} ${pidCode}`);
+  let currentHeader: string | null = null;
+  const ensureHeader = async (hdr: string) => {
+    const header = hdr.trim().toUpperCase();
+    if (!header) return;
+    if (currentHeader === header) return;
+    await sendCommand(`ATSH ${header}`);
+    currentHeader = header;
+  };
 
-      // Check for valid response (should start with positive response code).
-      // Mode 22 positive response = 62, Mode 21 positive response = 61.
-      // Error responses contain "7F" (negative response) or "NO DATA".
+  for (const id of signalIds) {
+    const def = TOYOTA_PIDS[id];
+    if (!def) continue;
+
+    const request = (def.request ?? def.pid).trim().toUpperCase();
+    const header = (def.header ?? '').trim().toUpperCase();
+
+    try {
+      if (header) {
+        await ensureHeader(header);
+      }
+
+      const cmd = request.match(/.{1,2}/g)?.join(' ') ?? request;
+      const response = await sendCommand(cmd);
+
       const isError =
-        response.includes('NO DATA') ||
-        response.includes('7F') ||
-        response.includes('ERROR') ||
+        response.toUpperCase().includes('NO DATA') ||
+        response.toUpperCase().includes('7F') ||
+        response.toUpperCase().includes('ERROR') ||
         response.trim() === '';
 
       if (!isError) {
-        supported.push(pid);
+        supported.push(id);
       }
     } catch {
-      // PID not supported or communication error - skip
+      // skip
     }
   }
 
   return supported;
 }
+

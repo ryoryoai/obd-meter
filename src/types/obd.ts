@@ -8,13 +8,34 @@ export type ConnectionState =
 
 // OBD PID定義
 export interface PidDefinition {
-  pid: string; // e.g. "010C"
+  /**
+   * App-level signal id (store key).
+   * Standard OBD-II signals typically use the same value as `request` (e.g. "010C").
+   * PriusChat/Torque-derived signals may use a different id that maps to a shared request.
+   */
+  pid: string; // e.g. "010C" or "TOYOTA_HV_SOC" or "PC_7E2_2181_V01"
   name: string; // e.g. "Engine RPM"
   shortName: string; // e.g. "RPM"
   unit: string; // e.g. "rpm"
   min: number;
   max: number;
   decode: (bytes: number[]) => number;
+
+  /**
+   * Raw OBD request bytes as a hex string (no spaces), e.g.:
+   * - "010C" (Mode 01 PID 0C)
+   * - "2181" (Mode 21 PID 81)
+   * - "220138" (Mode 22 PID 0138, 2-byte PID)
+   *
+   * If omitted, the protocol layer will use `pid` as the request.
+   */
+  request?: string;
+
+  /**
+   * Optional CAN TX header (11-bit) for ELM327 `ATSH`, e.g. "7E2", "7C4".
+   * If omitted, the protocol layer will use functional header "7DF".
+   */
+  header?: string;
 }
 
 // リアルタイムOBDデータ（PIDごとの最新値）

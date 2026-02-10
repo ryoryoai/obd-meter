@@ -2,6 +2,9 @@ import { PidDefinition } from '../types/obd';
 import { STANDARD_PIDS, SUPPORTED_PID_QUERIES, decodeSupportedPids } from './pid/standard';
 import { TOYOTA_PIDS } from './pid/toyota';
 
+/** Default functional CAN header for Mode 01 queries (broadcast). */
+const DEFAULT_TX_HEADER = '7DF';
+
 /**
  * Interface for ELM327 adapter communication.
  * The OBDProtocol class depends on this interface rather than a concrete class,
@@ -47,11 +50,31 @@ export class OBDProtocol {
   private pollingTimer: ReturnType<typeof setTimeout> | null = null;
   private isPolling = false;
   private allPidDefinitions: Record<string, PidDefinition>;
+  private currentTxHeader: string | null = null;
 
   constructor(elm327: Elm327Interface) {
     this.elm327 = elm327;
     // Merge standard and Toyota PID definitions into a single lookup
     this.allPidDefinitions = { ...STANDARD_PIDS, ...TOYOTA_PIDS };
+  }
+
+  private formatObdCommand(request: string): string {
+    const compact = request.replace(/\s+/g, '').toUpperCase();
+    const parts = compact.match(/.{1,2}/g);
+    return parts ? parts.join(' ') : compact;
+  }
+
+  private async ensureTxHeader(header: string | undefined): Promise<void> {
+    const desired = (header ?? DEFAULT_TX_HEADER).trim().toUpperCase();
+    if (!desired) return;
+
+    if (this.currentTxHeader === desired) {
+      return;
+    }
+
+    // ELM327 sets the transmit CAN identifier with ATSH (11-bit header like 7E2/7C4).
+    await this.elm327.sendCommand(`ATSH ${desired}`);
+    this.currentTxHeader = desired;
   }
 
   /**
@@ -67,18 +90,22 @@ export class OBDProtocol {
       throw new Error('ELM327 adapter is not connected');
     }
 
+    // Supported PID bitmasks are Mode 01 and should be queried using functional header.
+    await this.ensureTxHeader(DEFAULT_TX_HEADER);
+
     const supported: string[] = [];
 
     for (const query of SUPPORTED_PID_QUERIES) {
       try {
-        const mode = query.substring(0, 2);
-        const pid = query.substring(2, 4);
-        const rawResponse = await this.elm327.sendCommand(`${mode} ${pid}`);
+        const rawResponse = await this.elm327.sendCommand(this.formatObdCommand(query));
 
         const bytes = this.parseResponseBytes(rawResponse, query);
         if (bytes.length >= 4) {
           const pids = decodeSupportedPids(query, bytes);
           supported.push(...pids);
+
+          const mode = query.substring(0, 2);
+          const pid = query.substring(2, 4);
 
           // If the last bit (PID+0x20) is not set, there are no more ranges to query
           const lastPidInRange = parseInt(pid, 16) + 0x20;
@@ -117,11 +144,12 @@ export class OBDProtocol {
       throw new Error(`Unknown PID: ${pid}`);
     }
 
-    const mode = pid.substring(0, 2);
-    const pidCode = pid.substring(2, 4);
-    const rawResponse = await this.elm327.sendCommand(`${mode} ${pidCode}`);
+    const request = (definition.request ?? pid).replace(/\s+/g, '').toUpperCase();
+    await this.ensureTxHeader(definition.header);
 
-    const bytes = this.parseResponseBytes(rawResponse, pid);
+    const rawResponse = await this.elm327.sendCommand(this.formatObdCommand(request));
+
+    const bytes = this.parseResponseBytes(rawResponse, request);
     if (bytes.length === 0) {
       throw new Error(`No data received for PID ${pid}`);
     }
@@ -165,21 +193,61 @@ export class OBDProtocol {
 
     this.isPolling = true;
 
+    // Group signal ids by the underlying OBD request (plus ECU header) so we only
+    // send each request once per cycle, even if multiple metrics are derived from it.
+    const groups: Array<{ request: string; header: string | undefined; ids: string[] }> = [];
+    const groupIndex = new Map<string, number>();
+    for (const id of pids) {
+      const def = this.allPidDefinitions[id];
+      const request = (def?.request ?? id).replace(/\s+/g, '').toUpperCase();
+      const header = def?.header;
+      const key = `${(header ?? DEFAULT_TX_HEADER).trim().toUpperCase()}|${request}`;
+
+      const idx = groupIndex.get(key);
+      if (idx === undefined) {
+        groupIndex.set(key, groups.length);
+        groups.push({ request, header, ids: [id] });
+      } else {
+        groups[idx].ids.push(id);
+      }
+    }
+
     const pollCycle = async () => {
       if (!this.isPolling) {
         return;
       }
 
-      for (const pid of pids) {
+      for (const group of groups) {
         if (!this.isPolling) {
           return;
         }
 
         try {
-          const result = await this.readPid(pid);
-          callback(pid, result);
+          await this.ensureTxHeader(group.header);
+          const raw = await this.elm327.sendCommand(this.formatObdCommand(group.request));
+          const bytes = this.parseResponseBytes(raw, group.request);
+          if (bytes.length === 0) {
+            throw new Error(`No data received for request ${group.request}`);
+          }
+
+          for (const id of group.ids) {
+            const def = this.allPidDefinitions[id];
+            if (!def) {
+              callback(id, null, new Error(`Unknown PID: ${id}`));
+              continue;
+            }
+            try {
+              const value = def.decode(bytes);
+              callback(id, { value, raw });
+            } catch (err) {
+              callback(id, null, err instanceof Error ? err : new Error(String(err)));
+            }
+          }
         } catch (error) {
-          callback(pid, null, error instanceof Error ? error : new Error(String(error)));
+          const err = error instanceof Error ? error : new Error(String(error));
+          for (const id of group.ids) {
+            callback(id, null, err);
+          }
         }
       }
 
@@ -224,6 +292,9 @@ export class OBDProtocol {
 
     const results: { code: string; isPending: boolean }[] = [];
 
+    // DTC reads are Mode 03/07 and should use functional header.
+    await this.ensureTxHeader(DEFAULT_TX_HEADER);
+
     // Mode 03: Stored DTCs
     try {
       const rawResponse = await this.elm327.sendCommand('03');
@@ -259,6 +330,7 @@ export class OBDProtocol {
     }
 
     try {
+      await this.ensureTxHeader(DEFAULT_TX_HEADER);
       const rawResponse = await this.elm327.sendCommand('04');
       // Positive response is 44
       return rawResponse.includes('44');
@@ -340,12 +412,8 @@ export class OBDProtocol {
    * @returns Array of data bytes
    */
   private parseResponseBytes(rawResponse: string, pid: string): number[] {
-    // Clean up the response: remove whitespace artifacts, prompt chars, line breaks
-    const cleaned = rawResponse
-      .replace(/>/g, '')
-      .replace(/\r/g, ' ')
-      .replace(/\n/g, ' ')
-      .trim();
+    // Clean up the response: remove prompt chars and normalize case.
+    const cleaned = rawResponse.replace(/>/g, '').trim().toUpperCase();
 
     if (
       cleaned.includes('NO DATA') ||
@@ -356,62 +424,53 @@ export class OBDProtocol {
       return [];
     }
 
-    // Determine header length based on the mode
-    const mode = parseInt(pid.substring(0, 2), 16);
+    const request = pid.replace(/\s+/g, '').toUpperCase();
+    if (request.length < 2 || request.length % 2 !== 0) {
+      return [];
+    }
+
+    const mode = parseInt(request.substring(0, 2), 16);
     const responseMode = mode + 0x40;
 
-    // Split into hex byte tokens and parse (works when "spaces on").
-    const tokens = cleaned.split(/\s+/).filter((t) => /^[0-9A-Fa-f]{2}$/.test(t));
-    let allBytes: number[] = [];
-
-    if (tokens.length > 0) {
-      allBytes = tokens.map((t) => parseInt(t, 16));
-    } else {
-      // Fallback for "spaces off" (ATS0) where the adapter returns a contiguous hex string
-      // like "410C1AF8". We locate the response header ("responseMode"+"pidCode") to avoid
-      // accidentally parsing non-hex noise like "SEARCHING...".
-      const pidCode = pid.substring(2, 4).toUpperCase();
-      const responseModeHex = responseMode.toString(16).toUpperCase().padStart(2, '0');
-      const headerHex = `${responseModeHex}${pidCode}`;
-
-      const compact = cleaned.replace(/\s+/g, '').toUpperCase();
-      const startIndex = compact.indexOf(headerHex);
-      if (startIndex === -1) {
+    // Requested PID bytes can be 0, 1 or more bytes depending on the service.
+    const pidHex = request.substring(2);
+    const pidBytes: number[] = [];
+    for (let i = 0; i + 1 < pidHex.length; i += 2) {
+      const pair = pidHex.substring(i, i + 2);
+      if (!/^[0-9A-F]{2}$/.test(pair)) {
         return [];
       }
+      pidBytes.push(parseInt(pair, 16));
+    }
 
-      const hexTail = compact.substring(startIndex);
-      for (let i = 0; i + 1 < hexTail.length; i += 2) {
-        const pair = hexTail.substring(i, i + 2);
-        if (!/^[0-9A-F]{2}$/.test(pair)) {
+    // Extract all byte pairs from the response (works for both spaces-on and spaces-off),
+    // then locate the expected header sequence in the byte stream.
+    const pairs = cleaned.match(/[0-9A-F]{2}/g);
+    if (!pairs || pairs.length === 0) {
+      return [];
+    }
+    const allBytes = pairs.map((p) => parseInt(p, 16));
+
+    const headerSeq = [responseMode, ...pidBytes];
+
+    // Find the first occurrence of [responseMode, ...pidBytes]
+    for (let i = 0; i + headerSeq.length <= allBytes.length; i++) {
+      let ok = true;
+      for (let j = 0; j < headerSeq.length; j++) {
+        if (allBytes[i + j] !== headerSeq[j]) {
+          ok = false;
           break;
         }
-        allBytes.push(parseInt(pair, 16));
       }
+      if (!ok) continue;
+
+      const dataStart = i + headerSeq.length;
+      if (dataStart >= allBytes.length) {
+        return [];
+      }
+      return allBytes.slice(dataStart);
     }
 
-    if (allBytes.length === 0) {
-      return [];
-    }
-
-    // Find the start of our response (in case of multi-line or extra data)
-    const responseStart = allBytes.indexOf(responseMode);
-    if (responseStart === -1) {
-      return [];
-    }
-
-    // Skip: response mode byte (1) + PID echo byte(s)
-    // Mode 01: 1 header byte (response mode) + 1 PID byte = 2 bytes to skip
-    // Mode 21/22: 1 header byte (response mode) + 1 PID byte = 2 bytes to skip
-    // (For 2-byte PIDs in Mode 22, it would be 3 bytes to skip, but our simplified
-    // PID format uses single-byte PID codes)
-    const headerLength = 2;
-    const dataStart = responseStart + headerLength;
-
-    if (dataStart >= allBytes.length) {
-      return [];
-    }
-
-    return allBytes.slice(dataStart);
+    return [];
   }
 }

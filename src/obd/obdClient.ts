@@ -14,7 +14,18 @@ const DEFAULT_PIDS: ReadonlyArray<string> = [
   '010D', // Speed
   '0105', // Coolant
   '0111', // Throttle
+
+  // ZVW30 Prius (Toyota / PriusChat custom PIDs)
+  'TOYOTA_HV_SOC',
+  'TOYOTA_HV_VOLTAGE',
+  'TOYOTA_HV_CURRENT',
+  'TOYOTA_HV_TEMP',
+
+  // Environment / HVAC
   '0146', // Ambient
+  'TOYOTA_CABIN_TEMP',
+  'TOYOTA_AC_STATUS',
+  'TOYOTA_AC_SET_TEMP',
 
   // Useful extras (polled only if supported)
   '0110', // MAF
@@ -98,7 +109,13 @@ class ObdClient {
       try {
         const supported = await this.protocol.querySupportedPids();
         const supportedSet = new Set(supported);
-        pidsToPoll = pidsToPoll.filter((pid) => supportedSet.has(pid));
+        pidsToPoll = pidsToPoll.filter((pid) => {
+          // Supported-PID bitmasks only apply to Mode 01 / 1-byte PIDs.
+          if (/^[0-9A-F]{4}$/i.test(pid) && pid.toUpperCase().startsWith('01')) {
+            return supportedSet.has(pid.toUpperCase());
+          }
+          return true; // keep Toyota/custom signals
+        });
       } catch {
         // If support query fails, fall back to the default list (errors are handled per PID).
       }
@@ -113,7 +130,16 @@ class ObdClient {
 
       // In case nothing was detected, keep at least the required ones.
       if (pidsToPoll.length === 0) {
-        pidsToPoll = ['010C', '010D', '0105', '0111'];
+        pidsToPoll = [
+          '010C',
+          '010D',
+          '0105',
+          '0111',
+          'TOYOTA_HV_SOC',
+          'TOYOTA_HV_VOLTAGE',
+          'TOYOTA_HV_CURRENT',
+          'TOYOTA_HV_TEMP',
+        ];
       }
 
       this.protocol.startPolling(pidsToPoll, intervalMs, (pid, result) => {
